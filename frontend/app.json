@@ -3,6 +3,7 @@
     "name": "weatherapp",
     "slug": "weatherapp",
     "version": "1.0.0",
+    "scheme": "weatherapp",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",

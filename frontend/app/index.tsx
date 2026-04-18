@@ -1,39 +1,155 @@
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
   TextInput,
   TouchableOpacity,
   StyleSheet,
+  Animated,
+  Dimensions,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
 } from "react-native";
-import { useRouter } from "expo-router";
-import { useState } from "react";
+import { useRouter, Stack } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
 
-export default function Login() {
+// Obtenemos dimensiones para la responsividad
+const { width, height } = Dimensions.get("window");
+
+export default function LoginScreen(): React.ReactElement {
   const router = useRouter();
 
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  // Tipado de estados
+  const [email, setEmail] = useState<string>("");
+  const [password, setPassword] = useState<string>("");
+
+  // Tipado de animaciones (Animated.Value)
+  const cloud1Anim = useRef(new Animated.Value(width)).current;
+  const cloud2Anim = useRef(new Animated.Value(width + 150)).current;
+
+  useEffect(() => {
+    // Función de animación con tipado
+    const animateCloud = (
+      animValue: Animated.Value,
+      duration: number,
+      delay: number = 0,
+    ): void => {
+      Animated.loop(
+        Animated.sequence([
+          Animated.delay(delay),
+          Animated.timing(animValue, {
+            toValue: -200,
+            duration: duration,
+            useNativeDriver: true,
+          }),
+          Animated.timing(animValue, {
+            toValue: width,
+            duration: 0,
+            useNativeDriver: true,
+          }),
+        ]),
+      ).start();
+    };
+
+    animateCloud(cloud1Anim, 30000);
+    animateCloud(cloud2Anim, 20000, 5000);
+  }, [cloud1Anim, cloud2Anim, width]);
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Weather App</Text>
-      <TextInput
-        placeholder="Correo"
-        placeholderTextColor="#94a3b8"
-        style={styles.input}
-        value={email}
-        onChangeText={setEmail}
-      />
-      <TextInput
-        placeholder="Contraseña"
-        placeholderTextColor="#94a3b8"
-        style={styles.input}
-        value={password}
-        onChangeText={setPassword}
-      />
-      <TouchableOpacity onPress={() => router.push("/register")}>
-        <Text style={styles.link}>Crear cuenta</Text>
-      </TouchableOpacity>
+      {/* Oculta el header de Expo Router */}
+      {/* <Stack.Screen options={{ headerShown: false }} />*/}
+
+      {/* Nubes Animadas */}
+      <Animated.View
+        style={[
+          styles.cloud,
+          { top: height * 0.1, transform: [{ translateX: cloud1Anim }] },
+        ]}
+      >
+        <Ionicons name="cloud" size={150} color="#e2e8f0" />
+      </Animated.View>
+
+      <Animated.View
+        style={[
+          styles.cloud,
+          { top: height * 0.3, transform: [{ translateX: cloud2Anim }] },
+        ]}
+      >
+        <Ionicons name="cloud" size={100} color="#cbd5e1" />
+      </Animated.View>
+
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        style={{ flex: 1 }}
+      >
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+        >
+          <View style={styles.header}>
+            <Ionicons name="sunny" size={80} color="#f59e0b" />
+            <Text style={styles.title}>WeatherApp</Text>
+            <Text style={styles.subtitle}>Tu clima, en un solo lugar</Text>
+          </View>
+
+          <View style={styles.form}>
+            <View style={styles.inputWrapper}>
+              <Ionicons
+                name="mail-outline"
+                size={20}
+                color="#64748b"
+                style={styles.icon}
+              />
+              <TextInput
+                placeholder="Correo electrónico"
+                placeholderTextColor="#94a3b8"
+                style={styles.input}
+                value={email}
+                onChangeText={(text: string) => setEmail(text)}
+                autoCapitalize="none"
+                keyboardType="email-address"
+              />
+            </View>
+
+            <View style={styles.inputWrapper}>
+              <Ionicons
+                name="lock-closed-outline"
+                size={20}
+                color="#64748b"
+                style={styles.icon}
+              />
+              <TextInput
+                placeholder="Contraseña"
+                placeholderTextColor="#94a3b8"
+                style={styles.input}
+                value={password}
+                onChangeText={(text: string) => setPassword(text)}
+                secureTextEntry
+              />
+            </View>
+
+            <TouchableOpacity
+              style={styles.button}
+              activeOpacity={0.8}
+              onPress={() => router.push("/home")} /*</View>console.log("Login con:", email)}*/
+            >
+              <Text style={styles.buttonText}>Entrar</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={() => router.push("/register")}
+              style={styles.linkButton}
+            >
+              <Text style={styles.linkText}>
+                ¿Nuevo aquí?{" "}
+                <Text style={styles.linkHighlight}>Crea una cuenta</Text>
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </View>
   );
 }
@@ -41,38 +157,82 @@ export default function Login() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "020617",
+    backgroundColor: "#FFFFFF",
+  },
+  cloud: {
+    position: "absolute",
+    opacity: 0.5,
+  },
+  scrollContent: {
+    flexGrow: 1,
     justifyContent: "center",
-    padding: 20,
+    paddingHorizontal: width * 0.1,
+    paddingVertical: 50,
+  },
+  header: {
+    alignItems: "center",
+    marginBottom: 40,
   },
   title: {
-    color: "#fff",
-    fontSize: 30,
-    textAlign: "center",
-    marginBottom: 30,
-    fontWeight: "bold",
+    fontSize: 34,
+    fontWeight: "900",
+    color: "#1e293b",
+    marginTop: 10,
+    letterSpacing: -0.5,
+  },
+  subtitle: {
+    fontSize: 16,
+    color: "#94a3b8",
+    marginTop: 5,
+  },
+  form: {
+    width: "100%",
+  },
+  inputWrapper: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#f1f5f9",
+    borderRadius: 16,
+    marginBottom: 16,
+    paddingHorizontal: 18,
+    height: 60, // Altura fija para consistencia
+  },
+  icon: {
+    marginRight: 12,
   },
   input: {
-    backgroundColor: "#1e293b",
-    color: "#fff",
-    padding: 14,
-    borderRadius: 10,
-    marginBottom: 15,
+    flex: 1,
+    color: "#1e293b",
+    fontSize: 16,
   },
   button: {
-    backgroundColor: "#2563eb",
-    padding: 14,
-    borderRadius: 10,
+    backgroundColor: "#0f172a", // Un tono casi negro para contraste premium
+    height: 60,
+    borderRadius: 16,
+    justifyContent: "center",
+    alignItems: "center",
     marginTop: 10,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 4,
   },
   buttonText: {
     color: "#fff",
-    textAlign: "center",
     fontWeight: "bold",
+    fontSize: 18,
   },
-  link: {
-    color: "#60a5fa",
+  linkButton: {
+    marginTop: 30,
+  },
+  linkText: {
     textAlign: "center",
-    marginTop: 15,
+    color: "#64748b",
+    fontSize: 15,
+  },
+  linkHighlight: {
+    color: "#3b82f6",
+    fontWeight: "700",
   },
 });
