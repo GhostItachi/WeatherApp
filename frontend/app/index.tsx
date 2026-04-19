@@ -13,16 +13,18 @@ import {
 } from "react-native";
 import { useRouter, Stack } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import axios from "axios";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Alert, ActivityIndicator } from "react-native";
 
 // Obtenemos dimensiones para la responsividad
 const { width, height } = Dimensions.get("window");
 
 export default function LoginScreen(): React.ReactElement {
   const router = useRouter();
-
-  // Tipado de estados
   const [email, setEmail] = useState<string>("");
   const [password, setPassword] = useState<string>("");
+  const [loading, setLoading] = useState<boolean>(false);
 
   // Tipado de animaciones (Animated.Value)
   const cloud1Anim = useRef(new Animated.Value(width)).current;
@@ -55,7 +57,44 @@ export default function LoginScreen(): React.ReactElement {
     animateCloud(cloud1Anim, 30000);
     animateCloud(cloud2Anim, 20000, 5000);
   }, [cloud1Anim, cloud2Anim, width]);
+  const handleLogin = async () => {
+    if (!email || !password) {
+      Alert.alert("Error", "Por favor completa todos los campos");
+      return;
+    }
 
+    setLoading(true);
+    try {
+      // IMPORTANTE: OAuth2 en FastAPI usa form-data
+      const formData = new FormData();
+      formData.append("username", email);
+      formData.append("password", password);
+
+      // Cambia esta IP por la de tu PC si usas celular físico
+      const response = await axios.post(
+        "http://192.168.101.76:8000/users/login",
+        formData,
+        {
+          headers: { "Content-Type": "multipart/form-data" },
+        },
+      );
+
+      // Si el login es exitoso
+      const { access_token } = response.data;
+
+      // Guardamos el token de forma persistente
+      await AsyncStorage.setItem("userToken", access_token);
+
+      console.log("Login exitoso, token guardado");
+      router.replace("/home"); // Usamos replace para que no pueda volver al login con el botón de atrás
+    } catch (error: any) {
+      const errorDetail =
+        error.response?.data?.detail || "No se pudo conectar con el servidor";
+      Alert.alert("Fallo en el inicio de sesión", errorDetail);
+    } finally {
+      setLoading(false);
+    }
+  };
   return (
     <View style={styles.container}>
       {/* Oculta el header de Expo Router */}
@@ -131,11 +170,16 @@ export default function LoginScreen(): React.ReactElement {
             </View>
 
             <TouchableOpacity
-              style={styles.button}
+              style={[styles.button, loading && { opacity: 0.7 }]}
               activeOpacity={0.8}
-              onPress={() => router.push("/home")} /*</View>console.log("Login con:", email)}*/
+              onPress={handleLogin}
+              disabled={loading} // Evitamos múltiples clics
             >
-              <Text style={styles.buttonText}>Entrar</Text>
+              {loading ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.buttonText}>Entrar</Text>
+              )}
             </TouchableOpacity>
 
             <TouchableOpacity
