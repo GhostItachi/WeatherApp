@@ -4,27 +4,28 @@ from app import database, models, schemas, auth
 import httpx
 import os
 
+# This router handles weather search and favorite cities.
 router = APIRouter(prefix="/weather", tags=["Weather"])
 
 API_KEY = os.getenv("OPENWEATHER_API_KEY")
 print(f"DEBUG: Mi API KEY es: {API_KEY}")
 BASE_URL = "https://api.openweathermap.org/data/2.5/weather"
 
-
-# Endpoint para buscar clima actual de cualquier ciudad
 @router.get("/current/{city}", response_model=schemas.WeatherResponse)
 async def get_weather(city: str):
+    # Read the API key and call OpenWeather with the city name.
     api_key = os.getenv("OPENWEATHER_API_KEY")
     async with httpx.AsyncClient() as client:
         params = {"q": city.strip(), "appid": api_key, "units": "metric", "lang": "es"}
         response = await client.get(BASE_URL, params=params)
 
+        # If the external API fails, return a simple not found error.
         if response.status_code != 200:
             raise HTTPException(status_code=404, detail="Ciudad no encontrada")
 
         data = response.json()
 
-        # AQUÍ OCURRE EL REFINAMIENTO (FILTRADO)
+        # Build a smaller response with only the fields the app needs.
         refined_data = {
             "city": data["name"],
             "temperature": data["main"]["temp"],
@@ -35,28 +36,25 @@ async def get_weather(city: str):
 
         return refined_data
 
-
-# Endpoint para GUARDAR una ciudad favorita
 @router.post("/favorites", response_model=schemas.FavoriteCityOut)
 def add_favorite(
     favorite: schemas.FavoriteCityBase,
     db: Session = Depends(database.get_db),
-    current_user: models.User = Depends(auth.get_current_user),  # <-- ¡PROTEGIDO!
+    current_user: models.User = Depends(auth.get_current_user),
 ):
-    # Ahora usamos el ID real del usuario que inició sesión
+    # Save one favorite city for the logged in user.
     new_fav = models.FavoriteCity(city_name=favorite.city_name, user_id=current_user.id)
     db.add(new_fav)
     db.commit()
     db.refresh(new_fav)
     return new_fav
 
-
 @router.get("/favorites/my", response_model=list[schemas.WeatherResponse])
 async def get_my_favorites(
     db: Session = Depends(database.get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
-    # 1. Buscamos las ciudades favoritas del usuario en la DB
+    # First, get the user's saved cities from the local database.
     fav_cities = (
         db.query(models.FavoriteCity)
         .filter(models.FavoriteCity.user_id == current_user.id)
@@ -66,9 +64,9 @@ async def get_my_favorites(
     results = []
     api_key = os.getenv("OPENWEATHER_API_KEY")
 
-    # 2. Por cada ciudad guardada, pedimos su clima actual
     async with httpx.AsyncClient() as client:
         for fav in fav_cities:
+            # Then, get the current weather for each favorite city.
             params = {
                 "q": fav.city_name,
                 "appid": api_key,
@@ -79,7 +77,7 @@ async def get_my_favorites(
 
             if response.status_code == 200:
                 data = response.json()
-                # 3. Refinamos los datos igual que antes
+                # Add only the data used by the mobile app.
                 results.append(
                     {
                         "city": data["name"],

@@ -7,59 +7,57 @@ from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 import os
 
-# Importaciones de tu proyecto
 from app import database, models
 
-# Configuración leída desde el .env
+# Secret values are loaded from environment variables.
 SECRET_KEY = os.getenv("SECRET_KEY", "una_llave_muy_secreta_por_defecto")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24
 
-# Este objeto busca el token en el Header "Authorization: Bearer <TOKEN>"
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="users/login")
+# This object reads the Bearer token from the request header.
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/users/login")
 
+# This object hashes passwords and checks password matches.
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-
-# --- Funciones de Contraseña ---
 def verify_password(plain_password, hashed_password):
+    # Compare the plain password with the saved hash.
     return pwd_context.verify(plain_password, hashed_password)
 
-
 def get_password_hash(password):
+    # Convert a plain password into a secure hash.
     return pwd_context.hash(password)
 
-
-# --- Funciones de Token ---
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
+    # Copy the payload and add the expiration time.
     to_encode = data.copy()
     expire = datetime.utcnow() + (
         expires_delta if expires_delta else timedelta(minutes=15)
     )
     to_encode.update({"exp": expire})
+    # Encode the payload as a JWT token.
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
-
-# --- EL "PORTERO": Dependencia para proteger rutas ---
 def get_current_user(
     token: str = Depends(oauth2_scheme), db: Session = Depends(database.get_db)
 ):
+    # This dependency protects routes and returns the logged in user.
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="No se pudo validar el usuario",
         headers={"WWW-Authenticate": "Bearer"},
     )
     try:
+        # Decode the token and read the user email from "sub".
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        # Usamos cast o simplemente tipado flexible
-        email: str = payload.get("sub") or ""  # Si es None, será un string vacío
+        email: str = payload.get("sub") or ""
         if not email:
             raise credentials_exception
     except JWTError:
         raise credentials_exception
 
-    # Buscamos al usuario en la DB para asegurarnos de que aún existe
+    # Check that the user still exists in the database.
     user = db.query(models.User).filter(models.User.email == email).first()
     if user is None:
         raise credentials_exception

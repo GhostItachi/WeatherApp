@@ -19,7 +19,7 @@ import axios from "axios";
 
 const { width } = Dimensions.get("window");
 
-// Tipado para los datos del clima del backend
+// This type describes the weather data used by this screen.
 interface WeatherData {
   city: string;
   temperature: number;
@@ -31,11 +31,13 @@ interface WeatherData {
 export default function HomeScreen(): React.ReactElement {
   const router = useRouter();
 
-  // ESTADOS REALES
+  // favorites stores weather data for the user's saved cities.
   const [favorites, setFavorites] = useState<WeatherData[]>([]);
+  // loading controls the spinner while data is loading.
   const [loading, setLoading] = useState<boolean>(true);
 
   useEffect(() => {
+    // This function gets the token and loads favorite weather data.
     const fetchWeather = async () => {
       try {
         const token = await AsyncStorage.getItem("userToken");
@@ -44,7 +46,6 @@ export default function HomeScreen(): React.ReactElement {
           return;
         }
 
-        // Llamada a tu endpoint inteligente de favoritos
         const response = await axios.get(
           "http://192.168.101.76:8000/weather/favorites/my",
           {
@@ -66,19 +67,20 @@ export default function HomeScreen(): React.ReactElement {
   if (loading) {
     return (
       <View style={[styles.container, { justifyContent: "center" }]}>
+        {/* Show a spinner while the screen waits for the API response. */}
         <ActivityIndicator size="large" color="#0ea5e9" />
       </View>
     );
   }
 
-  // Tomamos la primera ciudad para la tarjeta principal, o un estado vacío
+  // The first favorite city is used as the main weather card.
   const mainWeather = favorites.length > 0 ? favorites[0] : null;
 
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
       <Stack.Screen options={{ headerShown: false }} />
 
-      {/* Barra de herramientas superior */}
+      {/* Top bar with app title and profile button. */}
       <View style={styles.topBar}>
         <TouchableOpacity>
           <Ionicons name="menu" size={28} color="#1e293b" />
@@ -97,7 +99,7 @@ export default function HomeScreen(): React.ReactElement {
       >
         <Text style={styles.dateTime}>Clima en tiempo real</Text>
 
-        {/* Tarjeta Principal Dinámica */}
+        {/* Main card shows the first favorite city in a bigger format. */}
         {mainWeather ? (
           <LinearGradient
             colors={["#0ea5e9", "#2563eb"]}
@@ -142,7 +144,7 @@ export default function HomeScreen(): React.ReactElement {
           </View>
         )}
 
-        {/* Alerta de Riesgo (Estática por ahora) */}
+        {/* This card shows a simple static suggestion to the user. */}
         <TouchableOpacity style={styles.alertCard}>
           <View style={styles.alertLeft}>
             <View style={styles.alertIconBg}>
@@ -158,7 +160,7 @@ export default function HomeScreen(): React.ReactElement {
           <Ionicons name="chevron-forward" size={20} color="#94a3b8" />
         </TouchableOpacity>
 
-        {/* Listado de otras ciudades favoritas */}
+        {/* The rest of the favorite cities are shown in a smaller list. */}
         <View style={[styles.sectionCard, { marginBottom: 30 }]}>
           <Text style={[styles.sectionTitle, { marginBottom: 10 }]}>
             Otras ubicaciones
@@ -219,20 +221,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     marginTop: 4,
   },
-  //dotActive: {
-  //  width: 6,
-  //  height: 6,
-  //  borderRadius: 3,
-  //  backgroundColor: "#0369a1",
-  //  marginHorizontal: 2,
-  //},
-  //dot: {
-  //  width: 6,
-  //  height: 6,
-  //  borderRadius: 3,
-  //  backgroundColor: "#cbd5e1",
-  //  marginHorizontal: 2,
-  //},
   scrollContent: {
     paddingHorizontal: 15,
   },

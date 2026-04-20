@@ -2,4 +2,7 @@ node_modules
 .expo
 comm.txt
 .env
+.vscode
+__pycache__/
+venv/
 dist

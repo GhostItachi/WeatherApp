@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -7,33 +7,100 @@ import {
   TouchableOpacity,
   ScrollView,
   Dimensions,
+  ActivityIndicator,
+  Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Stack, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import axios from "axios";
 
 const { width } = Dimensions.get("window");
 
 export default function ProfileScreen(): React.ReactElement {
   const router = useRouter();
 
-  // Datos simulados (esto vendría de tu lógica de estado/backend)
+  // userEmail stores the email returned by the backend.
+  const [userEmail, setUserEmail] = useState<string>("");
+  // loading controls the spinner while the profile is loading.
+  const [loading, setLoading] = useState<boolean>(true);
+
+  useEffect(() => {
+    // Load the current user using the saved token.
+    const fetchUserProfile = async () => {
+      try {
+        const token = await AsyncStorage.getItem("userToken");
+        if (!token) {
+          router.replace("/");
+          return;
+        }
+
+        const response = await axios.get(
+          "http://192.168.101.76:8000/users/me",
+          {
+            headers: { Authorization: `Bearer ${token}` },
+          },
+        );
+
+        setUserEmail(
+          response.data.email || response.data.username || "Usuario",
+        );
+      } catch (error) {
+        console.error("Error al obtener perfil:", error);
+        handleLogout();
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchUserProfile();
+  }, []);
+
+  const handleLogout = async () => {
+    // Remove the token and send the user back to login.
+    try {
+      await AsyncStorage.removeItem("userToken");
+      router.replace("/");
+    } catch (e) {
+      Alert.alert("Error", "No se pudo cerrar la sesión");
+    }
+  };
+
+  // Create a simple display name from the email before the "@" symbol.
+  const displayName = userEmail.includes("@")
+    ? userEmail.split("@")[0]
+    : userEmail;
+
+  // This object is temporary UI data for the profile screen.
   const user = {
-    name: "Alex Storm",
-    email: "alex.weather@example.com",
     bio: "Entusiasta de la meteorología y cazador de tormentas aficionado. Siempre buscando el sol.",
-    location: "Madrid, ES",
+    location: "Tu Ubicación",
     memberSince: "Abril 2024",
     reports: 124,
   };
+
+  if (loading) {
+    return (
+      <View
+        style={[
+          styles.container,
+          { justifyContent: "center", alignItems: "center" },
+        ]}
+      >
+        {/* Show a loader until the profile request finishes. */}
+        <ActivityIndicator size="large" color="#3b82f6" />
+      </View>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
       <Stack.Screen options={{ headerShown: false }} />
 
       <ScrollView showsVerticalScrollIndicator={false}>
-        {/* Header con gradiente y Foto */}
+        {/* Top section with avatar, name, and quick actions. */}
         <LinearGradient
           colors={["#3b82f6", "#60a5fa"]}
           style={styles.headerGradient}
@@ -53,20 +120,24 @@ export default function ProfileScreen(): React.ReactElement {
           <View style={styles.profileInfo}>
             <View style={styles.imageContainer}>
               <Image
-                source={{ uri: "https://i.pravatar.cc/150?u=alex" }}
+                source={{
+                  uri: `https://ui-avatars.com/api/?name=${displayName}&background=fff&color=3b82f6`,
+                }}
                 style={styles.profileImage}
               />
               <View style={styles.statusBadge} />
             </View>
-            <Text style={styles.userName}>{user.name}</Text>
+            <Text style={[styles.userName, { textTransform: "capitalize" }]}>
+              {displayName}
+            </Text>
             <View style={styles.locationTag}>
-              <Ionicons name="location" size={14} color="#d1d5db" />
-              <Text style={styles.locationText}>{user.location}</Text>
+              <Ionicons name="mail" size={14} color="#d1d5db" />
+              <Text style={styles.locationText}>{userEmail}</Text>
             </View>
           </View>
         </LinearGradient>
 
-        {/* Estadísticas de Usuario (Estilo Clima) */}
+        {/* These cards show simple user stats. */}
         <View style={styles.statsRow}>
           <View style={styles.statCard}>
             <Ionicons name="thunderstorm-outline" size={24} color="#3b82f6" />
@@ -89,7 +160,7 @@ export default function ProfileScreen(): React.ReactElement {
           </View>
         </View>
 
-        {/* Sección de Descripción */}
+        {/* Biography section. */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Biografía</Text>
           <View style={styles.bioContainer}>
@@ -97,7 +168,7 @@ export default function ProfileScreen(): React.ReactElement {
           </View>
         </View>
 
-        {/* Menú de Opciones */}
+        {/* Menu actions for profile options and logout. */}
         <View style={styles.menuSection}>
           <TouchableOpacity style={styles.menuItem}>
             <View style={[styles.menuIcon, { backgroundColor: "#eff6ff" }]}>
@@ -119,7 +190,10 @@ export default function ProfileScreen(): React.ReactElement {
             <Ionicons name="chevron-forward" size={20} color="#cbd5e1" />
           </TouchableOpacity>
 
-          <TouchableOpacity style={[styles.menuItem, { borderBottomWidth: 0 }]}>
+          <TouchableOpacity
+            style={[styles.menuItem, { borderBottomWidth: 0 }]}
+            onPress={handleLogout}
+          >
             <View style={[styles.menuIcon, { backgroundColor: "#fff1f2" }]}>
               <Ionicons name="log-out-outline" size={22} color="#f43f5e" />
             </View>
@@ -203,7 +277,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     paddingHorizontal: 20,
-    marginTop: -30, // Eleva las tarjetas sobre el gradiente
+    marginTop: -30,
   },
   statCard: {
     backgroundColor: "#fff",

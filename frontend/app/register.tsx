@@ -11,26 +11,30 @@ import {
   Platform,
   ScrollView,
   StatusBar,
+  Alert,
+  ActivityIndicator,
 } from "react-native";
 import { useRouter, Stack } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
+import axios from "axios";
 
 const { width, height } = Dimensions.get("window");
-
-// Configuración de la lluvia
-const NUMBER_OF_RAINDROPS = 40; // Cuántas gotas/hilos de lluvia
+const [loading, setLoading] = useState(false);
+// This value controls how many animated raindrops are rendered.
+const NUMBER_OF_RAINDROPS = 40;
 
 export default function RegisterScreen(): React.ReactElement {
   const router = useRouter();
 
-  // Estados del formulario con tipado
+  // These states store the register form data.
   const [name, setName] = useState<string>("");
   const [email, setEmail] = useState<string>("");
   const [password, setPassword] = useState<string>("");
   const [confirmPassword, setConfirmPassword] = useState<string>("");
+  const [loading, setLoading] = useState<boolean>(false);
 
-  // Referencia para las animaciones de lluvia
+  // Each Animated.Value controls one raindrop movement.
   const rainAnimations = useRef<Animated.Value[]>(
     Array(NUMBER_OF_RAINDROPS)
       .fill(0)
@@ -38,55 +42,110 @@ export default function RegisterScreen(): React.ReactElement {
   ).current;
 
   useEffect(() => {
-    // Función para crear la animación de cada gota
-    const animateRaindrop = (animValue: Animated.Value, index: number) => {
-      // Aleatoriedad para que no caigan todas a la vez
-      const duration = 800 + Math.random() * 1000; // Velocidad aleatoria
-      const delay = Math.random() * 2000; // Retraso inicial aleatorio
+    // Start a loop animation for every raindrop.
+    const animations = rainAnimations.map((animValue) => {
+      const duration = 800 + Math.random() * 1000;
+      const delay = Math.random() * 2000;
 
-      Animated.loop(
+      const animation = Animated.loop(
         Animated.sequence([
           Animated.delay(delay),
           Animated.timing(animValue, {
-            toValue: 1, // Final de la caída
+            toValue: 1,
             duration: duration,
             useNativeDriver: true,
           }),
           Animated.timing(animValue, {
-            toValue: 0, // Reinicio instantáneo arriba
+            toValue: 0,
             duration: 0,
             useNativeDriver: true,
           }),
         ]),
-      ).start();
-    };
+      );
+      animation.start();
+      return animation;
+    });
 
-    // Iniciar animaciones para todas las gotas
-    rainAnimations.forEach((anim, index) => animateRaindrop(anim, index));
-  }, [rainAnimations]);
+    return () => animations.forEach((a) => a.stop());
+  }, []);
+
+  const handleRegister = async () => {
+    // Basic validation before sending the request.
+    if (!name || !email || !password || !confirmPassword) {
+      Alert.alert("Error", "Por favor rellena todos los campos");
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      Alert.alert("Error", "Las contraseñas no coinciden");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      // Send the new user data to the backend.
+      const response = await axios.post("http://192.168.101.76:8000/users/", {
+        email: email,
+        password: password,
+        full_name: name,
+      });
+
+      // On success, show a message and go back to login.
+      if (response.status === 200 || response.status === 201) {
+        Alert.alert("¡Éxito!", "Cuenta creada correctamente.", [
+          {
+            text: "Ir al Login",
+            onPress: () => {
+              router.replace("/");
+            },
+          },
+        ]);
+      }
+    } catch (error: any) {
+      // Show a specific message for backend errors or network errors.
+      if (error.response) {
+        const serverMessage = error.response.data.detail;
+
+        if (serverMessage === "Email ya registrado") {
+          Alert.alert(
+            "Aviso",
+            "Este correo ya tiene una cuenta. Prueba a iniciar sesión o usa otro correo.",
+          );
+        } else {
+          Alert.alert(
+            "Error",
+            serverMessage || "Algo salió mal en el registro.",
+          );
+        }
+      } else {
+        Alert.alert(
+          "Error de conexión",
+          "No se pudo conectar con el servidor. Verifica tu Wi-Fi.",
+        );
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <LinearGradient
-      // Colores de noche profunda profesional
       colors={["#0f172a", "#1e293b", "#020617"]}
       style={styles.container}
     >
-      {/* Ajustar barra de estado para fondo oscuro */}
+      {/* Light status bar works better on this dark background. */}
       <StatusBar barStyle="light-content" />
 
-      {/* Oculta el header de Expo Router */}
       <Stack.Screen options={{ headerShown: false }} />
 
-      {/* Capa de Lluvia Animada */}
+      {/* Background rain effect. */}
       <View style={StyleSheet.absoluteFill} pointerEvents="none">
         {rainAnimations.map((anim, index) => {
-          // Posición horizontal aleatoria para cada gota
           const marginLeft = Math.random() * width;
 
-          // Interpolación para mover la gota de arriba a abajo
           const translateY = anim.interpolate({
             inputRange: [0, 1],
-            outputRange: [-50, height + 50], // Empieza fuera arriba, termina fuera abajo
+            outputRange: [-50, height + 50],
           });
 
           return (
@@ -97,7 +156,6 @@ export default function RegisterScreen(): React.ReactElement {
                 {
                   left: marginLeft,
                   transform: [{ translateY }],
-                  // Opacidad aleatoria para profundidad
                   opacity: 0.2 + Math.random() * 0.4,
                 },
               ]}
@@ -114,7 +172,7 @@ export default function RegisterScreen(): React.ReactElement {
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
         >
-          {/* Botón Volver (Flecha) */}
+          {/* Back button to return to the previous screen. */}
           <TouchableOpacity
             style={styles.backButton}
             onPress={() => router.back()}
@@ -122,8 +180,8 @@ export default function RegisterScreen(): React.ReactElement {
             <Ionicons name="arrow-back" size={24} color="#f1f5f9" />
           </TouchableOpacity>
 
+          {/* Screen title and short text. */}
           <View style={styles.header}>
-            {/* Ícono de Luna para temática de Noche */}
             <Ionicons
               name="moon"
               size={70}
@@ -136,8 +194,8 @@ export default function RegisterScreen(): React.ReactElement {
             </Text>
           </View>
 
+          {/* Registration form fields and actions. */}
           <View style={styles.form}>
-            {/* Campo Nombre */}
             <View style={styles.inputWrapper}>
               <Ionicons
                 name="person-outline"
@@ -154,7 +212,6 @@ export default function RegisterScreen(): React.ReactElement {
               />
             </View>
 
-            {/* Campo Correo */}
             <View style={styles.inputWrapper}>
               <Ionicons
                 name="mail-outline"
@@ -173,7 +230,6 @@ export default function RegisterScreen(): React.ReactElement {
               />
             </View>
 
-            {/* Campo Contraseña */}
             <View style={styles.inputWrapper}>
               <Ionicons
                 name="lock-closed-outline"
@@ -191,7 +247,6 @@ export default function RegisterScreen(): React.ReactElement {
               />
             </View>
 
-            {/* Campo Confirmar Contraseña */}
             <View style={styles.inputWrapper}>
               <Ionicons
                 name="checkmark-done"
@@ -209,22 +264,27 @@ export default function RegisterScreen(): React.ReactElement {
               />
             </View>
 
-            {/* Botón Registro (Contraste con el Login) */}
             <TouchableOpacity
               style={styles.button}
               activeOpacity={0.8}
-              onPress={() => console.log("Registro intentado")}
+              onPress={handleRegister}
+              disabled={loading}
             >
               <LinearGradient
-                colors={["#3b82f6", "#2563eb"]} // Degradado azul en el botón para que resalte
+                colors={["#3b82f6", "#2563eb"]}
                 style={styles.buttonGradient}
               >
-                <Text style={styles.buttonText}>Registrarme</Text>
+                {/* Show a loader while the account is being created. */}
+                {loading ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={styles.buttonText}>Registrarme</Text>
+                )}
               </LinearGradient>
             </TouchableOpacity>
 
             <TouchableOpacity
-              onPress={() => router.push("/")} // Asumiendo que "/" es el login
+              onPress={() => router.push("/")}
               style={styles.linkButton}
             >
               <Text style={styles.linkText}>
@@ -247,14 +307,14 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     justifyContent: "center",
     paddingHorizontal: width * 0.1,
-    paddingTop: Platform.OS === "ios" ? 60 : 40, // Espacio para el notch/status bar
+    paddingTop: Platform.OS === "ios" ? 60 : 40,
     paddingBottom: 40,
   },
   raindrop: {
     position: "absolute",
-    width: 2, // Lluvia fina profesional
-    height: 25, // Longitud de la gota
-    backgroundColor: "#60a5fa", // Azul claro brillante
+    width: 2,
+    height: 25,
+    backgroundColor: "#60a5fa",
     borderRadius: 1,
   },
   backButton: {
@@ -269,11 +329,10 @@ const styles = StyleSheet.create({
   header: {
     alignItems: "center",
     marginBottom: 40,
-    marginTop: 30, // Espacio extra por el botón volver
+    marginTop: 30,
   },
   moonIcon: {
     marginBottom: 10,
-    // Brillo sutil en la luna
     textShadowColor: "rgba(226, 232, 240, 0.5)",
     textShadowOffset: { width: 0, height: 0 },
     textShadowRadius: 15,
@@ -297,29 +356,28 @@ const styles = StyleSheet.create({
   inputWrapper: {
     flexDirection: "row",
     alignItems: "center",
-    // Fondo translúcido (Glassmorphism)
     backgroundColor: "rgba(30, 41, 59, 0.5)",
     borderRadius: 16,
     marginBottom: 16,
     paddingHorizontal: 18,
     height: 60,
     borderWidth: 1,
-    borderColor: "rgba(148, 163, 184, 0.1)", // Borde casi invisible
+    borderColor: "rgba(148, 163, 184, 0.1)",
   },
   icon: {
     marginRight: 12,
   },
   input: {
     flex: 1,
-    color: "#f1f5f9", // Texto claro
+    color: "#f1f5f9",
     fontSize: 16,
   },
   button: {
     height: 60,
     borderRadius: 16,
     marginTop: 15,
-    overflow: "hidden", // Necesario para el degradado redondeado
-    shadowColor: "#3b82f6", // Sombra azul para que parezca que brilla
+    overflow: "hidden",
+    shadowColor: "#3b82f6",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
@@ -344,7 +402,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
   },
   linkHighlight: {
-    color: "#60a5fa", // Azul claro para el enlace
+    color: "#60a5fa",
     fontWeight: "700",
   },
 });

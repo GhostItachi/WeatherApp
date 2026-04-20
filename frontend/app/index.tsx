@@ -17,21 +17,32 @@ import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Alert, ActivityIndicator } from "react-native";
 
-// Obtenemos dimensiones para la responsividad
 const { width, height } = Dimensions.get("window");
 
 export default function LoginScreen(): React.ReactElement {
   const router = useRouter();
+  // These states store the form data and the loading state.
   const [email, setEmail] = useState<string>("");
   const [password, setPassword] = useState<string>("");
   const [loading, setLoading] = useState<boolean>(false);
 
-  // Tipado de animaciones (Animated.Value)
+  // These animated values move the clouds across the screen.
   const cloud1Anim = useRef(new Animated.Value(width)).current;
   const cloud2Anim = useRef(new Animated.Value(width + 150)).current;
 
   useEffect(() => {
-    // Función de animación con tipado
+    // If a token already exists, the user goes directly to the home screen.
+    const checkSession = async () => {
+      const token = await AsyncStorage.getItem("userToken");
+      if (token) {
+        router.replace("/home");
+      }
+    };
+    checkSession();
+  }, []);
+
+  useEffect(() => {
+    // This helper creates a loop animation for one cloud.
     const animateCloud = (
       animValue: Animated.Value,
       duration: number,
@@ -57,7 +68,9 @@ export default function LoginScreen(): React.ReactElement {
     animateCloud(cloud1Anim, 30000);
     animateCloud(cloud2Anim, 20000, 5000);
   }, [cloud1Anim, cloud2Anim, width]);
+
   const handleLogin = async () => {
+    // Basic check before sending data to the backend.
     if (!email || !password) {
       Alert.alert("Error", "Por favor completa todos los campos");
       return;
@@ -65,12 +78,11 @@ export default function LoginScreen(): React.ReactElement {
 
     setLoading(true);
     try {
-      // IMPORTANTE: OAuth2 en FastAPI usa form-data
+      // FastAPI OAuth2 login expects FormData with username and password.
       const formData = new FormData();
       formData.append("username", email);
       formData.append("password", password);
 
-      // Cambia esta IP por la de tu PC si usas celular físico
       const response = await axios.post(
         "http://192.168.101.76:8000/users/login",
         formData,
@@ -79,14 +91,13 @@ export default function LoginScreen(): React.ReactElement {
         },
       );
 
-      // Si el login es exitoso
+      // Save the token so the session can stay active later.
       const { access_token } = response.data;
 
-      // Guardamos el token de forma persistente
       await AsyncStorage.setItem("userToken", access_token);
 
       console.log("Login exitoso, token guardado");
-      router.replace("/home"); // Usamos replace para que no pueda volver al login con el botón de atrás
+      router.replace("/home");
     } catch (error: any) {
       const errorDetail =
         error.response?.data?.detail || "No se pudo conectar con el servidor";
@@ -97,10 +108,7 @@ export default function LoginScreen(): React.ReactElement {
   };
   return (
     <View style={styles.container}>
-      {/* Oculta el header de Expo Router */}
-      {/* <Stack.Screen options={{ headerShown: false }} />*/}
-
-      {/* Nubes Animadas */}
+      {/* Decorative animated clouds in the background. */}
       <Animated.View
         style={[
           styles.cloud,
@@ -127,12 +135,14 @@ export default function LoginScreen(): React.ReactElement {
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
         >
+          {/* App title and short welcome message. */}
           <View style={styles.header}>
             <Ionicons name="sunny" size={80} color="#f59e0b" />
             <Text style={styles.title}>WeatherApp</Text>
             <Text style={styles.subtitle}>Tu clima, en un solo lugar</Text>
           </View>
 
+          {/* Login form fields and actions. */}
           <View style={styles.form}>
             <View style={styles.inputWrapper}>
               <Ionicons
@@ -173,8 +183,9 @@ export default function LoginScreen(): React.ReactElement {
               style={[styles.button, loading && { opacity: 0.7 }]}
               activeOpacity={0.8}
               onPress={handleLogin}
-              disabled={loading} // Evitamos múltiples clics
+              disabled={loading}
             >
+              {/* Show a spinner while the login request is in progress. */}
               {loading ? (
                 <ActivityIndicator color="#fff" />
               ) : (
@@ -239,7 +250,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     marginBottom: 16,
     paddingHorizontal: 18,
-    height: 60, // Altura fija para consistencia
+    height: 60,
   },
   icon: {
     marginRight: 12,
@@ -250,7 +261,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   button: {
-    backgroundColor: "#0f172a", // Un tono casi negro para contraste premium
+    backgroundColor: "#0f172a",
     height: 60,
     borderRadius: 16,
     justifyContent: "center",
