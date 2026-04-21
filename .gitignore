@@ -5,4 +5,5 @@ comm.txt
 .vscode
 __pycache__/
 venv/
+weather_app.db
 dist

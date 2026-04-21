@@ -16,51 +16,161 @@ import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
+import * as Location from "expo-location";
 
 const { width } = Dimensions.get("window");
 
 export default function ProfileScreen(): React.ReactElement {
   const router = useRouter();
 
-  // userEmail stores the email returned by the backend.
-  const [userEmail, setUserEmail] = useState<string>("");
-  // loading controls the spinner while the profile is loading.
+  // userData stores the profile returned by the backend.
+  const [userData, setUserData] = useState<any>(null);
+  // loading controls the first loading screen.
   const [loading, setLoading] = useState<boolean>(true);
+  // currentCity stores the device city name from reverse geocoding.
+  const [currentCity, setCurrentCity] = useState<string>("Buscando...");
+  // locationData stores the weather summary shown in the stats card.
+  const [locationData, setLocationData] = useState({
+    city: "Cargando...",
+    temp: "--",
+  });
 
   useEffect(() => {
-    // Load the current user using the saved token.
-    const fetchUserProfile = async () => {
+    const initializeProfile = async () => {
       try {
-        const token = await AsyncStorage.getItem("userToken");
-        if (!token) {
-          router.replace("/");
-          return;
-        }
+        // Load cached profile data first, so the screen can show something faster.
+        const [cachedUser, cachedLoc] = await Promise.all([
+          AsyncStorage.getItem("user_data_cache"),
+          AsyncStorage.getItem("location_weather_cache"),
+        ]);
 
-        const response = await axios.get(
+        if (cachedUser) setUserData(JSON.parse(cachedUser));
+        if (cachedLoc) setLocationData(JSON.parse(cachedLoc));
+
+        if (cachedUser) setLoading(false);
+
+        const token = await AsyncStorage.getItem("userToken");
+        if (!token) return router.replace("/");
+
+        // Update profile and weather in parallel in the background.
+        const profilePromise = axios.get(
           "http://192.168.101.76:8000/users/me",
           {
             headers: { Authorization: `Bearer ${token}` },
           },
         );
 
-        setUserEmail(
-          response.data.email || response.data.username || "Usuario",
+        const weatherPromise = fetchRealWeather();
+
+        const [profileRes, freshWeather] = await Promise.all([
+          profilePromise,
+          weatherPromise,
+        ]);
+
+        setUserData(profileRes.data);
+        await AsyncStorage.setItem(
+          "user_data_cache",
+          JSON.stringify(profileRes.data),
         );
+
+        if (freshWeather) {
+          setLocationData(freshWeather);
+          await AsyncStorage.setItem(
+            "location_weather_cache",
+            JSON.stringify(freshWeather),
+          );
+        }
       } catch (error) {
-        console.error("Error al obtener perfil:", error);
-        handleLogout();
+        console.error("Error sync:", error);
       } finally {
         setLoading(false);
       }
     };
 
-    fetchUserProfile();
+    initializeProfile();
   }, []);
 
-  const handleLogout = async () => {
-    // Remove the token and send the user back to login.
+  useEffect(() => {
+    const fetchUserProfileAndLocation = async () => {
+      try {
+        // Read the saved token before requesting protected data.
+        const token = await AsyncStorage.getItem("userToken");
+        if (!token) {
+          router.replace("/");
+          return;
+        }
+
+        // Get the current user from the backend.
+        const response = await axios.get(
+          "http://192.168.101.76:8000/users/me",
+          {
+            headers: { Authorization: `Bearer ${token}` },
+          },
+        );
+        setUserData(response.data);
+
+        // Ask for location permission and resolve the current city name.
+        let { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== "granted") {
+          setCurrentCity("Sin permiso");
+        } else {
+          let location = await Location.getCurrentPositionAsync({});
+          let geocode = await Location.reverseGeocodeAsync({
+            latitude: location.coords.latitude,
+            longitude: location.coords.longitude,
+          });
+
+          if (geocode.length > 0) {
+            const city =
+              geocode[0].city ||
+              geocode[0].subregion ||
+              geocode[0].region ||
+              "Desconocida";
+            setCurrentCity(city);
+          } else {
+            setCurrentCity("Desconocida");
+          }
+        }
+      } catch (error) {
+        console.error("Error cargando perfil o ubicación:", error);
+        setCurrentCity("Error");
+        if (!userData) handleLogout();
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchUserProfileAndLocation();
+  }, []);
+
+  const fetchRealWeather = async () => {
     try {
+      // This gets the device coordinates and asks the backend for weather data.
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") return null;
+
+      const location = await Location.getCurrentPositionAsync({});
+      const { latitude, longitude } = location.coords;
+
+      const res = await axios.get(
+        "http://192.168.101.76:8000/weather/current-coord",
+        {
+          params: { lat: latitude, lon: longitude },
+        },
+      );
+
+      return {
+        city: res.data.city,
+        temp: `${Math.round(res.data.temperature)}°C`,
+      };
+    } catch (e) {
+      return null;
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      // Remove the token and send the user back to the login screen.
       await AsyncStorage.removeItem("userToken");
       router.replace("/");
     } catch (e) {
@@ -68,18 +178,11 @@ export default function ProfileScreen(): React.ReactElement {
     }
   };
 
-  // Create a simple display name from the email before the "@" symbol.
+  const userEmail =
+    userData?.email || userData?.username || "usuario@correo.com";
   const displayName = userEmail.includes("@")
     ? userEmail.split("@")[0]
     : userEmail;
-
-  // This object is temporary UI data for the profile screen.
-  const user = {
-    bio: "Entusiasta de la meteorología y cazador de tormentas aficionado. Siempre buscando el sol.",
-    location: "Tu Ubicación",
-    memberSince: "Abril 2024",
-    reports: 124,
-  };
 
   if (loading) {
     return (
@@ -89,8 +192,11 @@ export default function ProfileScreen(): React.ReactElement {
           { justifyContent: "center", alignItems: "center" },
         ]}
       >
-        {/* Show a loader until the profile request finishes. */}
+        {/* Show a spinner while profile and location data are loading. */}
         <ActivityIndicator size="large" color="#3b82f6" />
+        <Text style={{ marginTop: 10, color: "#64748b" }}>
+          Cargando perfil y ubicación...
+        </Text>
       </View>
     );
   }
@@ -100,7 +206,7 @@ export default function ProfileScreen(): React.ReactElement {
       <Stack.Screen options={{ headerShown: false }} />
 
       <ScrollView showsVerticalScrollIndicator={false}>
-        {/* Top section with avatar, name, and quick actions. */}
+        {/* Header with avatar, user name, and quick buttons. */}
         <LinearGradient
           colors={["#3b82f6", "#60a5fa"]}
           style={styles.headerGradient}
@@ -128,7 +234,7 @@ export default function ProfileScreen(): React.ReactElement {
               <View style={styles.statusBadge} />
             </View>
             <Text style={[styles.userName, { textTransform: "capitalize" }]}>
-              {displayName}
+              {userData?.full_name || displayName}
             </Text>
             <View style={styles.locationTag}>
               <Ionicons name="mail" size={14} color="#d1d5db" />
@@ -137,38 +243,43 @@ export default function ProfileScreen(): React.ReactElement {
           </View>
         </LinearGradient>
 
-        {/* These cards show simple user stats. */}
+        {/* These cards show favorites, local weather, and status. */}
         <View style={styles.statsRow}>
           <View style={styles.statCard}>
-            <Ionicons name="thunderstorm-outline" size={24} color="#3b82f6" />
-            <Text style={styles.statNumber}>{user.reports}</Text>
-            <Text style={styles.statLabel}>Reportes</Text>
+            <Ionicons name="heart-outline" size={24} color="#3b82f6" />
+            <Text style={styles.statNumber}>
+              {userData?.favorites?.length || 0}
+            </Text>
+            <Text style={styles.statLabel}>Favoritos</Text>
           </View>
+
           <View style={styles.statCard}>
-            <Ionicons name="calendar-outline" size={24} color="#10b981" />
-            <Text style={styles.statNumber}>2y</Text>
-            <Text style={styles.statLabel}>Antigüedad</Text>
+            <Text style={styles.tempText}>{locationData.temp}</Text>
+            <Text style={styles.statValueSmall} numberOfLines={1}>
+              {locationData.city}
+            </Text>
+            <Text style={styles.statLabel}>Ubicación</Text>
           </View>
+
           <View style={styles.statCard}>
-            <Ionicons
-              name="shield-checkmark-outline"
-              size={24}
-              color="#f59e0b"
-            />
-            <Text style={styles.statNumber}>Pro</Text>
-            <Text style={styles.statLabel}>Nivel</Text>
+            <Ionicons name="cloud-done-outline" size={24} color="#f59e0b" />
+            <Text style={styles.statNumber}>Online</Text>
+            <Text style={styles.statLabel}>Estado</Text>
           </View>
         </View>
 
-        {/* Biography section. */}
+        {/* Short biography section. */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Biografía</Text>
           <View style={styles.bioContainer}>
-            <Text style={styles.bioText}>{user.bio}</Text>
+            <Text style={styles.bioText}>
+              Entusiasta de la meteorología y cazador de tormentas aficionado.
+              Siempre buscando el sol.
+            </Text>
           </View>
         </View>
 
-        {/* Menu actions for profile options and logout. */}
+        {/* Menu with profile actions and logout. */}
         <View style={styles.menuSection}>
           <TouchableOpacity style={styles.menuItem}>
             <View style={[styles.menuIcon, { backgroundColor: "#eff6ff" }]}>
@@ -281,8 +392,9 @@ const styles = StyleSheet.create({
   },
   statCard: {
     backgroundColor: "#fff",
-    width: width * 0.27,
+    width: width * 0.28,
     paddingVertical: 15,
+    paddingHorizontal: 5,
     borderRadius: 20,
     alignItems: "center",
     shadowColor: "#000",
@@ -296,6 +408,18 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     color: "#1e293b",
     marginTop: 8,
+  },
+  tempText: {
+    fontSize: 20,
+    fontWeight: "bold",
+    color: "#10b981",
+  },
+  statValueSmall: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#1e293b",
+    marginTop: 8,
+    textAlign: "center",
   },
   statLabel: {
     fontSize: 12,

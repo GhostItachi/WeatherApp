@@ -6,7 +6,6 @@ import {
   ScrollView,
   TouchableOpacity,
   Dimensions,
-  FlatList,
   ActivityIndicator,
   Image,
 } from "react-native";
@@ -16,10 +15,11 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
+import * as Location from "expo-location";
 
 const { width } = Dimensions.get("window");
 
-// This type describes the weather data used by this screen.
+// This type describes the weather data used by the screen.
 interface WeatherData {
   city: string;
   temperature: number;
@@ -31,56 +31,100 @@ interface WeatherData {
 export default function HomeScreen(): React.ReactElement {
   const router = useRouter();
 
-  // favorites stores weather data for the user's saved cities.
+  // currentWeather is the main weather card for the current device location.
+  const [currentWeather, setCurrentWeather] = useState<WeatherData | null>(
+    null,
+  );
+  // favorites stores weather data for saved cities.
   const [favorites, setFavorites] = useState<WeatherData[]>([]);
-  // loading controls the spinner while data is loading.
+  // loading controls the first screen load.
   const [loading, setLoading] = useState<boolean>(true);
+  // locating shows a loader while GPS weather is being requested.
+  const [locating, setLocating] = useState<boolean>(true);
 
   useEffect(() => {
-    // This function gets the token and loads favorite weather data.
-    const fetchWeather = async () => {
+    const initializeData = async () => {
       try {
+        // Read the auth token before calling protected endpoints.
         const token = await AsyncStorage.getItem("userToken");
         if (!token) {
           router.replace("/login");
           return;
         }
 
-        const response = await axios.get(
-          "http://192.168.101.76:8000/weather/favorites/my",
-          {
-            headers: { Authorization: `Bearer ${token}` },
-          },
-        );
-
-        setFavorites(response.data);
+        // Load current location weather and favorite cities at the same time.
+        await Promise.all([
+          fetchCurrentLocationWeather(),
+          fetchFavorites(token),
+        ]);
       } catch (error) {
-        console.error("Error cargando el clima:", error);
+        console.error("Error inicializando el Home:", error);
       } finally {
         setLoading(false);
       }
     };
 
-    fetchWeather();
+    initializeData();
   }, []);
+
+  const fetchCurrentLocationWeather = async () => {
+    setLocating(true);
+    try {
+      // Ask for location permission and get the current coordinates.
+      let { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") {
+        setLocating(false);
+        return;
+      }
+
+      let location = await Location.getCurrentPositionAsync({});
+      const { latitude, longitude } = location.coords;
+
+      // The backend converts coordinates into a weather response.
+      const response = await axios.get(
+        "http://192.168.101.76:8000/weather/current-coord",
+        {
+          params: { lat: latitude, lon: longitude },
+        },
+      );
+
+      setCurrentWeather(response.data);
+    } catch (e) {
+      console.error("Error en GPS Weather:", e);
+    } finally {
+      setLocating(false);
+    }
+  };
+
+  const fetchFavorites = async (token: string) => {
+    try {
+      // Get the weather for all favorite cities of the logged in user.
+      const response = await axios.get(
+        "http://192.168.101.76:8000/weather/favorites/my",
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      );
+      setFavorites(response.data);
+    } catch (e) {
+      console.error("Error cargando favoritos:", e);
+    }
+  };
 
   if (loading) {
     return (
       <View style={[styles.container, { justifyContent: "center" }]}>
-        {/* Show a spinner while the screen waits for the API response. */}
+        {/* Show a spinner while the screen is loading. */}
         <ActivityIndicator size="large" color="#0ea5e9" />
       </View>
     );
   }
 
-  // The first favorite city is used as the main weather card.
-  const mainWeather = favorites.length > 0 ? favorites[0] : null;
-
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
       <Stack.Screen options={{ headerShown: false }} />
 
-      {/* Top bar with app title and profile button. */}
+      {/* Top bar with app name and profile button. */}
       <View style={styles.topBar}>
         <TouchableOpacity>
           <Ionicons name="menu" size={28} color="#1e293b" />
@@ -99,36 +143,54 @@ export default function HomeScreen(): React.ReactElement {
       >
         <Text style={styles.dateTime}>Clima en tiempo real</Text>
 
-        {/* Main card shows the first favorite city in a bigger format. */}
-        {mainWeather ? (
+        {/* Main card shows current weather based on the device location. */}
+        {locating ? (
+          <View
+            style={[
+              styles.mainCard,
+              {
+                backgroundColor: "#e2e8f0",
+                justifyContent: "center",
+                alignItems: "center",
+              },
+            ]}
+          >
+            <ActivityIndicator color="#0ea5e9" />
+            <Text style={{ marginTop: 10, color: "#64748b" }}>
+              Obteniendo ubicación...
+            </Text>
+          </View>
+        ) : currentWeather ? (
           <LinearGradient
             colors={["#0ea5e9", "#2563eb"]}
             style={styles.mainCard}
           >
             <View style={styles.mainCardHeader}>
               <View>
-                <Text style={styles.weatherCondition}>{mainWeather.city}</Text>
+                <Text style={styles.weatherCondition}>
+                  {currentWeather.city}
+                </Text>
                 <Text
                   style={[
                     styles.weatherCondition,
                     { textTransform: "capitalize" },
                   ]}
                 >
-                  {mainWeather.description}
+                  {currentWeather.description}
                 </Text>
                 <View style={styles.tempRow}>
                   <Image
                     source={{
-                      uri: `https://openweathermap.org/img/wn/${mainWeather.icon}@2x.png`,
+                      uri: `https://openweathermap.org/img/wn/${currentWeather.icon}@2x.png`,
                     }}
                     style={{ width: 60, height: 60 }}
                   />
                   <Text style={styles.mainTemp}>
-                    {Math.round(mainWeather.temperature)}°
+                    {Math.round(currentWeather.temperature)}°
                   </Text>
                 </View>
                 <Text style={styles.feelsLike}>
-                  Humedad: {mainWeather.humidity}%
+                  Humedad: {currentWeather.humidity}%
                 </Text>
               </View>
               <View style={styles.windInfo}>
@@ -140,11 +202,13 @@ export default function HomeScreen(): React.ReactElement {
           </LinearGradient>
         ) : (
           <View style={styles.alertCard}>
-            <Text style={styles.alertTitle}>No tienes favoritos guardados</Text>
+            <Text style={styles.alertTitle}>
+              Activa el GPS para ver tu clima
+            </Text>
           </View>
         )}
 
-        {/* This card shows a simple static suggestion to the user. */}
+        {/* This static card shows a short app tip. */}
         <TouchableOpacity style={styles.alertCard}>
           <View style={styles.alertLeft}>
             <View style={styles.alertIconBg}>
@@ -160,13 +224,13 @@ export default function HomeScreen(): React.ReactElement {
           <Ionicons name="chevron-forward" size={20} color="#94a3b8" />
         </TouchableOpacity>
 
-        {/* The rest of the favorite cities are shown in a smaller list. */}
+        {/* This section lists the user's favorite cities. */}
         <View style={[styles.sectionCard, { marginBottom: 30 }]}>
           <Text style={[styles.sectionTitle, { marginBottom: 10 }]}>
             Otras ubicaciones
           </Text>
-          {favorites.length > 1 ? (
-            favorites.slice(1).map((item, index) => (
+          {favorites.length > 0 ? (
+            favorites.map((item, index) => (
               <View key={index} style={styles.dailyRow}>
                 <View style={styles.dailyDayCol}>
                   <Text style={styles.dailyDayName}>{item.city}</Text>
