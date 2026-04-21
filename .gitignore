@@ -1,9 +1,32 @@
-node_modules
-.expo
-comm.txt
-.env
-.vscode
-__pycache__/
+# --- OS / IDE ---
+.vscode/
+.DS_Store
+Thumbs.db
+
+# --- Python / Backend ---
+backend/venv/
 venv/
+**/__pycache__/
+*.py[cod]
+*$py.class
+backend/.env
+.env
+
+# --- Databases ---
+*.db
+*.sqlite3
 weather_app.db
-dist
+
+# --- Node / Frontend ---
+node_modules/
+frontend/node_modules/
+.expo/
+frontend/.expo/
+dist/
+frontend/dist/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# --- Others ---
+comm.txt
