@@ -10,12 +10,15 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  Alert,
+  ActivityIndicator,
 } from "react-native";
 import { useRouter, Stack } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { Alert, ActivityIndicator } from "react-native";
+
+// Client
+import apiClient from "../src/api/client";
 
 const { width, height } = Dimensions.get("window");
 
@@ -83,13 +86,9 @@ export default function LoginScreen(): React.ReactElement {
       formData.append("username", email);
       formData.append("password", password);
 
-      const response = await axios.post(
-        "http://192.168.101.76:8000/users/login",
-        formData,
-        {
-          headers: { "Content-Type": "multipart/form-data" },
-        },
-      );
+      const response = await apiClient.post("/users/login", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
 
       // Save the token so the session can stay active later.
       const { access_token } = response.data;
@@ -106,6 +105,7 @@ export default function LoginScreen(): React.ReactElement {
       setLoading(false);
     }
   };
+
   return (
     <View style={styles.container}>
       {/* Decorative animated clouds in the background. */}

@@ -15,7 +15,7 @@ import { Stack, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import axios from "axios";
+import apiClient from "../src/api/client";
 import * as Location from "expo-location";
 
 const { width } = Dimensions.get("window");
@@ -35,53 +35,80 @@ export default function ProfileScreen(): React.ReactElement {
     temp: "--",
   });
 
+  // Initialization logic
   useEffect(() => {
     const initializeProfile = async () => {
+      // Track cache existence to prevent accidental logouts
+      let hasDataInCache = false;
+
       try {
-        // Load cached profile data first, so the screen can show something faster.
+        // 1. Load cached profile data first for immediate visual feedback.
         const [cachedUser, cachedLoc] = await Promise.all([
           AsyncStorage.getItem("user_data_cache"),
           AsyncStorage.getItem("location_weather_cache"),
         ]);
 
-        if (cachedUser) setUserData(JSON.parse(cachedUser));
+        if (cachedUser) {
+          setUserData(JSON.parse(cachedUser));
+          hasDataInCache = true;
+        }
         if (cachedLoc) setLocationData(JSON.parse(cachedLoc));
 
+        // If we have cache, we can stop showing the main spinner.
         if (cachedUser) setLoading(false);
 
+        // 2. Token validation.
         const token = await AsyncStorage.getItem("userToken");
         if (!token) return router.replace("/");
 
-        // Update profile and weather in parallel in the background.
-        const profilePromise = axios.get(
-          "http://192.168.101.76:8000/users/me",
-          {
-            headers: { Authorization: `Bearer ${token}` },
-          },
-        );
+        // 3. Fetch data using a single location request to optimize performance.
+        const profilePromise = apiClient.get("/users/me", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
 
-        const weatherPromise = fetchRealWeather();
+        const freshLocationData = await fetchUnifiedLocationAndWeather();
 
-        const [profileRes, freshWeather] = await Promise.all([
-          profilePromise,
-          weatherPromise,
-        ]);
+        const profileRes = await profilePromise;
 
+        // 4. Update state and persistence with fresh data.
         setUserData(profileRes.data);
+
+        // --- CHANGE: Improved handling based on the new errorType ---
+        if (freshLocationData) {
+          if (freshLocationData.errorType === "permission_denied") {
+            Alert.alert(
+              "Permisos necesarios",
+              "La app necesita acceso a la ubicación para mostrar el clima local.",
+            );
+          }
+
+          setCurrentCity(freshLocationData.cityName);
+
+          if (freshLocationData.weather) {
+            setLocationData({
+              city: freshLocationData.weather.city,
+              temp: freshLocationData.weather.temp,
+            });
+
+            await AsyncStorage.setItem(
+              "location_weather_cache",
+              JSON.stringify(freshLocationData.weather),
+            );
+          }
+        }
+
         await AsyncStorage.setItem(
           "user_data_cache",
           JSON.stringify(profileRes.data),
         );
-
-        if (freshWeather) {
-          setLocationData(freshWeather);
-          await AsyncStorage.setItem(
-            "location_weather_cache",
-            JSON.stringify(freshWeather),
-          );
-        }
       } catch (error) {
-        console.error("Error sync:", error);
+        console.error("Initialization error:", error);
+        // Only logout if there's no cached data to show
+        if (!hasDataInCache) {
+          handleLogout();
+        } else {
+          Alert.alert("Aviso", "Error de conexión. Mostrando datos locales.");
+        }
       } finally {
         setLoading(false);
       }
@@ -90,83 +117,94 @@ export default function ProfileScreen(): React.ReactElement {
     initializeProfile();
   }, []);
 
-  useEffect(() => {
-    const fetchUserProfileAndLocation = async () => {
+  // --- CHANGE: Added a more explicit return structure to handle different failure modes ---
+  // basic english: helper to distinguish between permission, network or geocoding errors.
+  interface UnifiedLocationResult {
+    cityName: string;
+    weather: { city: string; temp: string } | null;
+    errorType:
+      | "none"
+      | "permission_denied"
+      | "location_failed"
+      | "partial_success"
+      | "unknown";
+  }
+
+  // Helper to get location, city name and weather in one flow
+  const fetchUnifiedLocationAndWeather =
+    async (): Promise<UnifiedLocationResult> => {
       try {
-        // Read the saved token before requesting protected data.
-        const token = await AsyncStorage.getItem("userToken");
-        if (!token) {
-          router.replace("/");
-          return;
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== "granted") {
+          return {
+            cityName: "Sin Permisos",
+            weather: null,
+            errorType: "permission_denied",
+          };
         }
 
-        // Get the current user from the backend.
-        const response = await axios.get(
-          "http://192.168.101.76:8000/users/me",
-          {
-            headers: { Authorization: `Bearer ${token}` },
-          },
+        const location = await Location.getCurrentPositionAsync({}).catch(
+          () => null,
         );
-        setUserData(response.data);
+        if (!location) {
+          return {
+            cityName: "Ubicación desactivada",
+            weather: null,
+            errorType: "location_failed",
+          };
+        }
 
-        // Ask for location permission and resolve the current city name.
-        let { status } = await Location.requestForegroundPermissionsAsync();
-        if (status !== "granted") {
-          setCurrentCity("Sin permiso");
-        } else {
-          let location = await Location.getCurrentPositionAsync({});
-          let geocode = await Location.reverseGeocodeAsync({
-            latitude: location.coords.latitude,
-            longitude: location.coords.longitude,
-          });
+        const { latitude, longitude } = location.coords;
 
-          if (geocode.length > 0) {
-            const city =
+        const results = await Promise.allSettled([
+          Location.reverseGeocodeAsync({ latitude, longitude }),
+          apiClient.get("/weather/current-coord", {
+            params: { lat: latitude, lon: longitude },
+          }),
+        ]);
+
+        let cityName = "Desconocida";
+        let weatherData = null;
+        let hasError = false;
+
+        // Handle Geocoding result independently
+        if (results[0].status === "fulfilled") {
+          const geocode = results[0].value;
+          if (geocode && geocode.length > 0) {
+            cityName =
               geocode[0].city ||
               geocode[0].subregion ||
               geocode[0].region ||
               "Desconocida";
-            setCurrentCity(city);
-          } else {
-            setCurrentCity("Desconocida");
           }
+        } else {
+          console.error("Geocoding failed:", results[0].reason);
+          cityName = "Error de nombre";
+          hasError = true;
         }
-      } catch (error) {
-        console.error("Error cargando perfil o ubicación:", error);
-        setCurrentCity("Error");
-        if (!userData) handleLogout();
-      } finally {
-        setLoading(false);
+
+        // Handle Weather API result independently
+        if (results[1].status === "fulfilled") {
+          const res = results[1].value;
+          weatherData = {
+            city: res.data.city,
+            temp: `${Math.round(res.data.temperature)}°C`,
+          };
+        } else {
+          console.error("Weather API failed:", results[1].reason);
+          hasError = true;
+        }
+
+        return {
+          cityName,
+          weather: weatherData,
+          errorType: hasError ? "partial_success" : "none",
+        };
+      } catch (e) {
+        console.error("Error in unified location flow:", e);
+        return { cityName: "Error", weather: null, errorType: "unknown" };
       }
     };
-
-    fetchUserProfileAndLocation();
-  }, []);
-
-  const fetchRealWeather = async () => {
-    try {
-      // This gets the device coordinates and asks the backend for weather data.
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== "granted") return null;
-
-      const location = await Location.getCurrentPositionAsync({});
-      const { latitude, longitude } = location.coords;
-
-      const res = await axios.get(
-        "http://192.168.101.76:8000/weather/current-coord",
-        {
-          params: { lat: latitude, lon: longitude },
-        },
-      );
-
-      return {
-        city: res.data.city,
-        temp: `${Math.round(res.data.temperature)}°C`,
-      };
-    } catch (e) {
-      return null;
-    }
-  };
 
   const handleLogout = async () => {
     try {
@@ -255,8 +293,9 @@ export default function ProfileScreen(): React.ReactElement {
 
           <View style={styles.statCard}>
             <Text style={styles.tempText}>{locationData.temp}</Text>
+            {/* Using currentCity to show the geocoded city name */}
             <Text style={styles.statValueSmall} numberOfLines={1}>
-              {locationData.city}
+              {currentCity !== "Buscando..." ? currentCity : locationData.city}
             </Text>
             <Text style={styles.statLabel}>Ubicación</Text>
           </View>

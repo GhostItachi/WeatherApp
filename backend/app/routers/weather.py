@@ -1,28 +1,66 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from app import database, models, schemas, auth
 import httpx
 import os
+import logging
+
+# setup logging to track errors in the console/files
+logger = logging.getLogger(__name__)
 
 # This router handles weather endpoints and favorite cities.
 router = APIRouter(prefix="/weather", tags=["Weather"])
 
-API_KEY = os.getenv("OPENWEATHER_API_KEY")
-print(f"DEBUG: Mi API KEY es: {API_KEY}")
 BASE_URL = "https://api.openweathermap.org/data/2.5/weather"
+
+
+def get_api_key() -> str:
+    # Check if the API exist before requests
+    api_key = os.getenv("OPENWEATHER_API_KEY")
+    if not api_key:
+        raise HTTPException(status_code=500, detail="Weather service is not configured")
+    return api_key
+
+
+# Helper function to map external API errors to precise HTTP exceptions
+def handle_provider_error(response_status: int, city_name: str = "Unknown"):
+    """
+    Maps OpenWeather response codes to appropriate FastAPI exceptions.
+    Maps external status to our system status.
+    """
+    if response_status == 404:
+        raise HTTPException(
+            status_code=404, detail=f"Ciudad '{city_name}' no encontrada"
+        )
+    elif response_status == 401:
+        raise HTTPException(
+            status_code=502, detail="Error de autenticación con el proveedor"
+        )
+    elif response_status == 429:
+        raise HTTPException(status_code=429, detail="Límite de peticiones alcanzado")
+    elif response_status >= 500:
+        raise HTTPException(
+            status_code=503, detail="Servicio de clima temporalmente fuera de servicio"
+        )
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Error al procesar la solicitud de clima para {city_name}",
+        )
 
 
 @router.get("/current/{city}", response_model=schemas.WeatherResponse)
 async def get_weather(city: str):
     # Search the weather of one city by its name.
-    api_key = os.getenv("OPENWEATHER_API_KEY")
+    api_key = get_api_key()
+
     async with httpx.AsyncClient() as client:
         params = {"q": city.strip(), "appid": api_key, "units": "metric", "lang": "es"}
         response = await client.get(BASE_URL, params=params)
 
-        # If the external API fails, return a simple not found error.
+        # Use the mapping for precise error reporting
         if response.status_code != 200:
-            raise HTTPException(status_code=404, detail="Ciudad no encontrada")
+            handle_provider_error(response.status_code, city)
 
         data = response.json()
 
@@ -41,7 +79,8 @@ async def get_weather(city: str):
 @router.get("/current-coord", response_model=schemas.WeatherResponse)
 async def get_weather_by_coords(lat: float, lon: float):
     # Search the weather using latitude and longitude.
-    api_key = os.getenv("OPENWEATHER_API_KEY")
+    api_key = get_api_key()
+
     async with httpx.AsyncClient() as client:
         params = {
             "lat": lat,
@@ -52,11 +91,9 @@ async def get_weather_by_coords(lat: float, lon: float):
         }
         response = await client.get(BASE_URL, params=params)
 
+        # Error tracking for coordinates
         if response.status_code != 200:
-            raise HTTPException(
-                status_code=400,
-                detail="No se pudo obtener el clima para estas coordenadas",
-            )
+            handle_provider_error(response.status_code, f"Coords({lat},{lon})")
 
         # Build the response with the same shape used in the app.
         data = response.json()
@@ -96,11 +133,10 @@ async def get_my_favorites(
     )
 
     results = []
-    api_key = os.getenv("OPENWEATHER_API_KEY")
+    api_key = get_api_key()
 
     async with httpx.AsyncClient() as client:
         for fav in fav_cities:
-            # For each saved city, request the latest weather from OpenWeather.
             params = {
                 "q": fav.city_name,
                 "appid": api_key,
@@ -111,7 +147,6 @@ async def get_my_favorites(
 
             if response.status_code == 200:
                 data = response.json()
-                # Add only the fields the mobile app needs.
                 results.append(
                     {
                         "city": data["name"],
@@ -121,5 +156,18 @@ async def get_my_favorites(
                         "icon": data["weather"][0]["icon"],
                     }
                 )
+            else:
+                # Log the specific error and decide strategy
+                # log the error and stop the whole process if it's a provider issue
+                logger.error(
+                    f"Error fetching favorite '{fav.city_name}': Status {response.status_code}"
+                )
+
+                # >= 500 to critical errors to inform frontend about service downtime
+                # basic english: stop immediately if the external service is down or keys are invalid
+                if response.status_code in [401, 429] or response.status_code >= 500:
+                    handle_provider_error(response.status_code)
+
+                # If it's just a 404, we continue but the log remains for debugging.
 
     return results

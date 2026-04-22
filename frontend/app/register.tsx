@@ -17,24 +17,21 @@ import {
 import { useRouter, Stack } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import axios from "axios";
+
+import apiClient from "../src/api/client";
 
 const { width, height } = Dimensions.get("window");
-const [loading, setLoading] = useState(false);
-// This value controls how many animated raindrops are rendered.
 const NUMBER_OF_RAINDROPS = 40;
 
 export default function RegisterScreen(): React.ReactElement {
   const router = useRouter();
 
-  // These states store the register form data.
   const [name, setName] = useState<string>("");
   const [email, setEmail] = useState<string>("");
   const [password, setPassword] = useState<string>("");
   const [confirmPassword, setConfirmPassword] = useState<string>("");
   const [loading, setLoading] = useState<boolean>(false);
 
-  // Each Animated.Value controls one raindrop movement.
   const rainAnimations = useRef<Animated.Value[]>(
     Array(NUMBER_OF_RAINDROPS)
       .fill(0)
@@ -42,7 +39,6 @@ export default function RegisterScreen(): React.ReactElement {
   ).current;
 
   useEffect(() => {
-    // Start a loop animation for every raindrop.
     const animations = rainAnimations.map((animValue) => {
       const duration = 800 + Math.random() * 1000;
       const delay = Math.random() * 2000;
@@ -70,7 +66,6 @@ export default function RegisterScreen(): React.ReactElement {
   }, []);
 
   const handleRegister = async () => {
-    // Basic validation before sending the request.
     if (!name || !email || !password || !confirmPassword) {
       Alert.alert("Error", "Por favor rellena todos los campos");
       return;
@@ -83,14 +78,12 @@ export default function RegisterScreen(): React.ReactElement {
 
     setLoading(true);
     try {
-      // Send the new user data to the backend.
-      const response = await axios.post("http://192.168.101.76:8000/users/", {
+      const response = await apiClient.post("/users/", {
         email: email,
         password: password,
         full_name: name,
       });
 
-      // On success, show a message and go back to login.
       if (response.status === 200 || response.status === 201) {
         Alert.alert("¡Éxito!", "Cuenta creada correctamente.", [
           {
@@ -102,7 +95,6 @@ export default function RegisterScreen(): React.ReactElement {
         ]);
       }
     } catch (error: any) {
-      // Show a specific message for backend errors or network errors.
       if (error.response) {
         const serverMessage = error.response.data.detail;
 
@@ -128,21 +120,18 @@ export default function RegisterScreen(): React.ReactElement {
     }
   };
 
+  // JSX styles
   return (
     <LinearGradient
       colors={["#0f172a", "#1e293b", "#020617"]}
       style={styles.container}
     >
-      {/* Light status bar works better on this dark background. */}
       <StatusBar barStyle="light-content" />
-
       <Stack.Screen options={{ headerShown: false }} />
 
-      {/* Background rain effect. */}
       <View style={StyleSheet.absoluteFill} pointerEvents="none">
         {rainAnimations.map((anim, index) => {
           const marginLeft = Math.random() * width;
-
           const translateY = anim.interpolate({
             inputRange: [0, 1],
             outputRange: [-50, height + 50],
@@ -172,7 +161,6 @@ export default function RegisterScreen(): React.ReactElement {
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
         >
-          {/* Back button to return to the previous screen. */}
           <TouchableOpacity
             style={styles.backButton}
             onPress={() => router.back()}
@@ -180,7 +168,6 @@ export default function RegisterScreen(): React.ReactElement {
             <Ionicons name="arrow-back" size={24} color="#f1f5f9" />
           </TouchableOpacity>
 
-          {/* Screen title and short text. */}
           <View style={styles.header}>
             <Ionicons
               name="moon"
@@ -194,7 +181,6 @@ export default function RegisterScreen(): React.ReactElement {
             </Text>
           </View>
 
-          {/* Registration form fields and actions. */}
           <View style={styles.form}>
             <View style={styles.inputWrapper}>
               <Ionicons
@@ -274,7 +260,6 @@ export default function RegisterScreen(): React.ReactElement {
                 colors={["#3b82f6", "#2563eb"]}
                 style={styles.buttonGradient}
               >
-                {/* Show a loader while the account is being created. */}
                 {loading ? (
                   <ActivityIndicator color="#fff" />
                 ) : (

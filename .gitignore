@@ -1,32 +1,60 @@
 # --- OS / IDE ---
 .vscode/
+.idea/
 .DS_Store
 Thumbs.db
+*.swp
+*.swo
+*~
+.sublime-workspace
+
+# --- Environment Variables ---
+.env
+.env.local
+.env.*.local
 
 # --- Python / Backend ---
-backend/venv/
+# Virtual environments
 venv/
+env/
+ENV/
+.venv
+
+# Python cache and compiled files
 **/__pycache__/
 *.py[cod]
 *$py.class
-backend/.env
-.env
+*.egg-info/
+dist/
+build/
+
+# Python testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Backend specific
+backend/weather_app.db
+
+# --- Node / Frontend ---
+# Dependencies
+node_modules/
+
+# Expo and build artifacts
+.expo/
+.expo-shared/
+dist/
+build/
+
+# Logs
+npm-debug.log*
+npm-error.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
 
 # --- Databases ---
 *.db
+*.sqlite
 *.sqlite3
-weather_app.db
 
-# --- Node / Frontend ---
-node_modules/
-frontend/node_modules/
-.expo/
-frontend/.expo/
-dist/
-frontend/dist/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# --- Others ---
-comm.txt

@@ -14,7 +14,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import axios from "axios";
+import apiClient from "../src/api/client";
 import * as Location from "expo-location";
 
 const { width } = Dimensions.get("window");
@@ -48,7 +48,7 @@ export default function HomeScreen(): React.ReactElement {
         // Read the auth token before calling protected endpoints.
         const token = await AsyncStorage.getItem("userToken");
         if (!token) {
-          router.replace("/login");
+          router.replace("/");
           return;
         }
 
@@ -80,13 +80,9 @@ export default function HomeScreen(): React.ReactElement {
       let location = await Location.getCurrentPositionAsync({});
       const { latitude, longitude } = location.coords;
 
-      // The backend converts coordinates into a weather response.
-      const response = await axios.get(
-        "http://192.168.101.76:8000/weather/current-coord",
-        {
-          params: { lat: latitude, lon: longitude },
-        },
-      );
+      const response = await apiClient.get("/weather/current-coord", {
+        params: { lat: latitude, lon: longitude },
+      });
 
       setCurrentWeather(response.data);
     } catch (e) {
@@ -98,13 +94,9 @@ export default function HomeScreen(): React.ReactElement {
 
   const fetchFavorites = async (token: string) => {
     try {
-      // Get the weather for all favorite cities of the logged in user.
-      const response = await axios.get(
-        "http://192.168.101.76:8000/weather/favorites/my",
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        },
-      );
+      const response = await apiClient.get("/weather/favorites/my", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       setFavorites(response.data);
     } catch (e) {
       console.error("Error cargando favoritos:", e);
@@ -120,6 +112,7 @@ export default function HomeScreen(): React.ReactElement {
     );
   }
 
+  // JSX styles
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
       <Stack.Screen options={{ headerShown: false }} />
@@ -260,6 +253,7 @@ export default function HomeScreen(): React.ReactElement {
     </SafeAreaView>
   );
 }
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
