@@ -37,8 +37,16 @@ export default function LoginScreen(): React.ReactElement {
     // If a token already exists, the user goes directly to the home screen.
     const checkSession = async () => {
       const token = await AsyncStorage.getItem("userToken");
-      if (token) {
-        router.replace("/home");
+      if (!token) return;
+      try {
+        // Optionally, you could verify the token with the backend here.
+        await apiClient.get("/users/me", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+      } catch (error: any) {
+        if (error.response?.status === 401) {
+          await AsyncStorage.removeItem("userToken");
+        }
       }
     };
     checkSession();

@@ -8,6 +8,7 @@ import {
   Dimensions,
   ActivityIndicator,
   Image,
+  AppState,
 } from "react-native";
 import { Stack, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -71,13 +72,19 @@ export default function HomeScreen(): React.ReactElement {
     setLocating(true);
     try {
       // Ask for location permission and get the current coordinates.
-      let { status } = await Location.requestForegroundPermissionsAsync();
+      const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== "granted") {
-        setLocating(false);
+        setCurrentWeather(null);
         return;
       }
 
-      let location = await Location.getCurrentPositionAsync({});
+      const servecesEnabled = await Location.hasServicesEnabledAsync();
+      if (!servecesEnabled) {
+        setCurrentWeather(null);
+        return;
+      }
+
+      const location = await Location.getCurrentPositionAsync({});
       const { latitude, longitude } = location.coords;
 
       const response = await apiClient.get("/weather/current-coord", {
@@ -85,8 +92,9 @@ export default function HomeScreen(): React.ReactElement {
       });
 
       setCurrentWeather(response.data);
-    } catch (e) {
-      console.error("Error en GPS Weather:", e);
+    } catch (error) {
+      setCurrentWeather(null);
+      console.warn("No fue posible actualizar el clima actual:", error);
     } finally {
       setLocating(false);
     }
@@ -98,10 +106,25 @@ export default function HomeScreen(): React.ReactElement {
         headers: { Authorization: `Bearer ${token}` },
       });
       setFavorites(response.data);
-    } catch (e) {
-      console.error("Error cargando favoritos:", e);
+    } catch (error: any) {
+      if (error.response?.status === 401) {
+        await AsyncStorage.removeItem("userToken");
+        router.replace("/");
+      }
+      setFavorites([]);
+      console.warn("No fue posible cargar favoritos:", error);
     }
   };
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (nextState) => {
+      if (nextState === "active") {
+        fetchCurrentLocationWeather();
+      }
+    });
+
+    return () => subscription.remove();
+  }, [fetchCurrentLocationWeather]);
 
   if (loading) {
     return (
@@ -194,11 +217,15 @@ export default function HomeScreen(): React.ReactElement {
             </View>
           </LinearGradient>
         ) : (
-          <View style={styles.alertCard}>
+          <TouchableOpacity
+            style={styles.alertCard}
+            onPress={fetchCurrentLocationWeather}
+          >
             <Text style={styles.alertTitle}>
               Activa el GPS para ver tu clima
             </Text>
-          </View>
+            <Text style={styles.alertDesc}>Toca para reintentar</Text>
+          </TouchableOpacity>
         )}
 
         {/* This static card shows a short app tip. */}

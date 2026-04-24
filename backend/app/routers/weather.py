@@ -150,6 +150,7 @@ async def get_my_favorites(
             if response.status_code == 200:
                 data = response.json()
                 results.append(parse_weather_response(data))
+
             else:
                 # Log the specific error and decide strategy
                 # log the error and stop the whole process if it's a provider issue
