@@ -1,11 +1,13 @@
 from typing import List
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from .. import models, schemas, database, auth
 from fastapi.security import OAuth2PasswordRequestForm
+from datetime import timedelta
 
 # This router handles user actions like login and CRUD operations.
 router = APIRouter(prefix="/users", tags=["Users"])
+
 
 @router.post("/login")
 def login(
@@ -20,13 +22,18 @@ def login(
         raise HTTPException(status_code=400, detail="Credenciales incorrectas")
 
     # Create a JWT token and store the user email inside "sub".
-    access_token = auth.create_access_token(data={"sub": user.email})
+    access_token = auth.create_access_token(
+        data={"sub": user.email},
+        expires_delta=timedelta(minutes=auth.ACCESS_TOKEN_EXPIRE_MINUTES),
+    )
     return {"access_token": access_token, "token_type": "bearer"}
 
-@router.get("/me")
+
+@router.get("/me", response_model=schemas.UserOut)
 def read_users_me(current_user: models.User = Depends(auth.get_current_user)):
     # Return the authenticated user from the token.
     return current_user
+
 
 @router.post("/", response_model=schemas.UserOut)
 def create_user(user: schemas.UserCreate, db: Session = Depends(database.get_db)):
@@ -45,45 +52,36 @@ def create_user(user: schemas.UserCreate, db: Session = Depends(database.get_db)
     db.refresh(new_user)
     return new_user
 
-@router.get("/", response_model=List[schemas.UserOut])
-def read_users(db: Session = Depends(database.get_db)):
-    # Return all users from the database.
-    return db.query(models.User).all()
 
-@router.get("/{user_id}", response_model=schemas.UserOut)
-def read_user(user_id: int, db: Session = Depends(database.get_db)):
-    # Search one user by id.
-    user = db.query(models.User).filter(models.User.id == user_id).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="Usuario no encontrado")
-    return user
-
-@router.put("/{user_id}", response_model=schemas.UserOut)
-def update_user(
-    user_id: int,
+@router.put("/me", response_model=schemas.UserOut)
+def update_current_user(
     user_update: schemas.UserUpdate,
     db: Session = Depends(database.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
 ):
-    # Find the user before applying changes.
-    db_user = db.query(models.User).filter(models.User.id == user_id).first()
-    if not db_user:
-        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    """Update current user's profile"""
+    if user_update.email and user_update.email != current_user.email:
+        existing = (
+            db.query(models.User).filter(models.User.email == user_update.email).first()
+        )
+        if existing:
+            raise HTTPException(status_code=400, detail="Email already taken")
 
-    # Only update the fields that the client sent.
     update_data = user_update.model_dump(exclude_unset=True)
     for key, value in update_data.items():
-        setattr(db_user, key, value)
+        setattr(current_user, key, value)
 
     db.commit()
-    db.refresh(db_user)
-    return db_user
+    db.refresh(current_user)
+    return current_user
 
-@router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_user(user_id: int, db: Session = Depends(database.get_db)):
-    # Delete the user if it exists.
-    user = db.query(models.User).filter(models.User.id == user_id).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="Usuario no encontrado")
-    db.delete(user)
+
+@router.delete("/me", status_code=204)  # ✅ Eliminar solo tu propio usuario
+def delete_current_user(
+    db: Session = Depends(database.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    """Delete current user account"""
+    db.delete(current_user)
     db.commit()
     return None

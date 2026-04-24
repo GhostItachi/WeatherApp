@@ -73,7 +73,7 @@ export default function ProfileScreen(): React.ReactElement {
         // 4. Update state and persistence with fresh data.
         setUserData(profileRes.data);
 
-        // --- CHANGE: Improved handling based on the new errorType ---
+        // -Improved handling based on the new errorType
         if (freshLocationData) {
           if (freshLocationData.errorType === "permission_denied") {
             Alert.alert(
@@ -117,8 +117,8 @@ export default function ProfileScreen(): React.ReactElement {
     initializeProfile();
   }, []);
 
-  // --- CHANGE: Added a more explicit return structure to handle different failure modes ---
-  // basic english: helper to distinguish between permission, network or geocoding errors.
+  // Added a more explicit return structure to handle different failure modes
+  // Helper to distinguish between permission, network or geocoding errors.
   interface UnifiedLocationResult {
     cityName: string;
     weather: { city: string; temp: string } | null;

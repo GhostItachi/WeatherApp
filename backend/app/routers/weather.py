@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app import database, models, schemas, auth
 import httpx
@@ -20,6 +20,24 @@ def get_api_key() -> str:
     if not api_key:
         raise HTTPException(status_code=500, detail="Weather service is not configured")
     return api_key
+
+
+def parse_weather_response(data: dict) -> dict:
+    """Safely parse OpenWeather API response"""
+    try:
+        main = data.get("main", {})
+        weather = data.get("weather", [{}])[0]
+
+        return {
+            "city": data.get("name", "Unknown"),
+            "temperature": main.get("temp", 0),
+            "description": weather.get("description", ""),
+            "humidity": main.get("humidity", 0),
+            "icon": weather.get("icon", ""),
+        }
+    except (KeyError, IndexError, TypeError, ValueError) as e:
+        logger.error(f"Failed to parse weather data: {e}")
+        raise HTTPException(status_code=502, detail="Invalid weather data format")
 
 
 # Helper function to map external API errors to precise HTTP exceptions
@@ -54,7 +72,7 @@ async def get_weather(city: str):
     # Search the weather of one city by its name.
     api_key = get_api_key()
 
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=10.0) as client:
         params = {"q": city.strip(), "appid": api_key, "units": "metric", "lang": "es"}
         response = await client.get(BASE_URL, params=params)
 
@@ -63,17 +81,7 @@ async def get_weather(city: str):
             handle_provider_error(response.status_code, city)
 
         data = response.json()
-
-        # Return only the weather fields used by the frontend.
-        refined_data = {
-            "city": data["name"],
-            "temperature": data["main"]["temp"],
-            "description": data["weather"][0]["description"],
-            "humidity": data["main"]["humidity"],
-            "icon": data["weather"][0]["icon"],
-        }
-
-        return refined_data
+        return parse_weather_response(data)
 
 
 @router.get("/current-coord", response_model=schemas.WeatherResponse)
@@ -81,7 +89,7 @@ async def get_weather_by_coords(lat: float, lon: float):
     # Search the weather using latitude and longitude.
     api_key = get_api_key()
 
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=10.0) as client:
         params = {
             "lat": lat,
             "lon": lon,
@@ -97,13 +105,7 @@ async def get_weather_by_coords(lat: float, lon: float):
 
         # Build the response with the same shape used in the app.
         data = response.json()
-        return {
-            "city": data["name"],
-            "temperature": data["main"]["temp"],
-            "description": data["weather"][0]["description"],
-            "humidity": data["main"]["humidity"],
-            "icon": data["weather"][0]["icon"],
-        }
+        return parse_weather_response(data)
 
 
 @router.post("/favorites", response_model=schemas.FavoriteCityOut)
@@ -135,7 +137,7 @@ async def get_my_favorites(
     results = []
     api_key = get_api_key()
 
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=10.0) as client:
         for fav in fav_cities:
             params = {
                 "q": fav.city_name,
@@ -147,15 +149,7 @@ async def get_my_favorites(
 
             if response.status_code == 200:
                 data = response.json()
-                results.append(
-                    {
-                        "city": data["name"],
-                        "temperature": data["main"]["temp"],
-                        "description": data["weather"][0]["description"],
-                        "humidity": data["main"]["humidity"],
-                        "icon": data["weather"][0]["icon"],
-                    }
-                )
+                results.append(parse_weather_response(data))
             else:
                 # Log the specific error and decide strategy
                 # log the error and stop the whole process if it's a provider issue
@@ -164,7 +158,7 @@ async def get_my_favorites(
                 )
 
                 # >= 500 to critical errors to inform frontend about service downtime
-                # basic english: stop immediately if the external service is down or keys are invalid
+                # Stop immediately if the external service is down or keys are invalid
                 if response.status_code in [401, 429] or response.status_code >= 500:
                     handle_provider_error(response.status_code)
 

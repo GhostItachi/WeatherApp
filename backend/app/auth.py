@@ -20,24 +20,30 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/users/login")
 # This object hashes passwords and checks password matches.
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
+
 def verify_password(plain_password, hashed_password):
     # Compare the plain password with the saved hash.
     return pwd_context.verify(plain_password, hashed_password)
+
 
 def get_password_hash(password):
     # Convert a plain password into a secure hash.
     return pwd_context.hash(password)
 
+
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     # Copy the payload and add the expiration time.
     to_encode = data.copy()
     expire = datetime.utcnow() + (
-        expires_delta if expires_delta else timedelta(minutes=15)
+        expires_delta
+        if expires_delta
+        else timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     )
     to_encode.update({"exp": expire})
     # Encode the payload as a JWT token.
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
+
 
 def get_current_user(
     token: str = Depends(oauth2_scheme), db: Session = Depends(database.get_db)
