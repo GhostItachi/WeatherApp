@@ -3,9 +3,9 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 
 export default function Layout() {
   return (
-    // SafeAreaProvider helps the app respect notches and screen edges.
+    // SafeAreaProvider keeps content inside safe screen areas.
     <SafeAreaProvider>
-      {/* Stack controls navigation between the app screens. */}
+      {/* The stack registers all app screens used by Expo Router. */}
       <Stack
         screenOptions={{
           headerStyle: {
@@ -18,11 +18,13 @@ export default function Layout() {
           headerShown: false,
         }}
       >
-        {/* These are the routes used by Expo Router in this app. */}
+        {/* Each screen name matches a file inside the app folder. */}
         <Stack.Screen name="index" options={{ title: "Login" }} />
         <Stack.Screen name="register" options={{ title: "Registro" }} />
         <Stack.Screen name="home" options={{ title: "Inicio" }} />
         <Stack.Screen name="profile" options={{ title: "Perfil" }} />
+        <Stack.Screen name="settings" options={{ title: "Configuración" }} />
+        <Stack.Screen name="edit-profile" options={{ title: "Editar Perfil" }} />
       </Stack>
     </SafeAreaProvider>
   );

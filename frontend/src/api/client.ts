@@ -1,27 +1,23 @@
 import axios from "axios";
 
-// Check for the environment variable to avoid silent failures on mobile
+// The backend base URL comes from the Expo public environment.
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL;
 
 if (!API_BASE_URL) {
-  // Warn the developer if the IP is not set for mobile testing
+  // This warning helps detect a missing IP when the app runs on a real device.
   console.warn(
     "WARNING: EXPO_PUBLIC_API_BASE_URL is not defined. " +
       "The app will fallback to localhost, which might not work on physical devices using Expo Go.",
   );
 }
 
-// This Axios client keeps the base URL and default JSON headers in one place.
+// This shared Axios client centralizes the API base URL and default headers.
 const apiClient = axios.create({
-  // Fallback to localhost only if the variable is missing
+  // localhost is used only as a fallback for local development.
   baseURL: API_BASE_URL || "http://localhost:8000",
   headers: {
     "Content-Type": "application/json",
   },
 });
-
-/* Note: We now log a warning instead of just failing, 
-   helping to debug connection issues on physical devices.
-*/
 
 export default apiClient;

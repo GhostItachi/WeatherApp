@@ -1,15 +1,18 @@
 from pydantic import BaseModel, EmailStr
 from typing import List, Optional
 
-# Base schema for a favorite city.
+
+# This base schema describes a favorite city name.
 class FavoriteCityBase(BaseModel):
     city_name: str
 
-# Schema used when the client creates a favorite city.
+
+# The client uses this schema when it sends a new favorite city.
 class FavoriteCityCreate(FavoriteCityBase):
     pass
 
-# Schema returned by the API after a favorite city is saved.
+
+# This schema is returned after a favorite city is saved.
 class FavoriteCityOut(FavoriteCityBase):
     id: int
     user_id: int
@@ -17,32 +20,43 @@ class FavoriteCityOut(FavoriteCityBase):
     class Config:
         from_attributes = True
 
-# Base schema shared by user inputs and outputs.
+
+# These fields are shared by user input and output schemas.
 class UserBase(BaseModel):
     email: EmailStr
     full_name: Optional[str] = None
+    bio: Optional[str] = None
 
-# Schema used when a new user registers.
+
+# This schema is used when a new account is created.
 class UserCreate(UserBase):
     password: str
 
-# Schema used for partial user updates.
+
+# This schema is used to update only some user fields.
 class UserUpdate(BaseModel):
     full_name: Optional[str] = None
     email: Optional[EmailStr] = None
+    bio: Optional[str] = None
 
-# Safe user data returned by the API.
+
+# This schema returns safe user data without the password hash.
 class UserOut(UserBase):
     id: int
     favorites: List[FavoriteCityBase] = []
+    bio: Optional[str] = None
 
     class Config:
         from_attributes = True
 
-# Schema returned for weather data in the app.
+
+# This schema defines the weather payload returned to the frontend.
 class WeatherResponse(BaseModel):
     city: str
     temperature: float
+    feels_like: float
     description: str
     humidity: int
+    pressure: int
+    wind_speed: float
     icon: str

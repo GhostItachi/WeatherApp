@@ -5,7 +5,7 @@ from .. import models, schemas, database, auth
 from fastapi.security import OAuth2PasswordRequestForm
 from datetime import timedelta
 
-# This router handles user actions like login and CRUD operations.
+# This router groups authentication and profile endpoints.
 router = APIRouter(prefix="/users", tags=["Users"])
 
 
@@ -14,14 +14,14 @@ def login(
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(database.get_db),
 ):
-    # FastAPI sends the email in form_data.username for OAuth2 login.
+    # OAuth2 sends the email in "username", so the query uses the email field.
     user = db.query(models.User).filter(models.User.email == form_data.username).first()
 
-    # If the user does not exist or the password is wrong, return an error.
+    # Stop the login if the user does not exist or the password is invalid.
     if not user or not auth.verify_password(form_data.password, user.hashed_password):
         raise HTTPException(status_code=400, detail="Credenciales incorrectas")
 
-    # Create a JWT token and store the user email inside "sub".
+    # The token stores the user email in the "sub" claim.
     access_token = auth.create_access_token(
         data={"sub": user.email},
         expires_delta=timedelta(minutes=auth.ACCESS_TOKEN_EXPIRE_MINUTES),
@@ -31,18 +31,18 @@ def login(
 
 @router.get("/me", response_model=schemas.UserOut)
 def read_users_me(current_user: models.User = Depends(auth.get_current_user)):
-    # Return the authenticated user from the token.
+    # This endpoint returns the user identified by the Bearer token.
     return current_user
 
 
 @router.post("/", response_model=schemas.UserOut)
 def create_user(user: schemas.UserCreate, db: Session = Depends(database.get_db)):
-    # Check if the email is already in use.
+    # The email must be unique before a new account is created.
     db_user = db.query(models.User).filter(models.User.email == user.email).first()
     if db_user:
         raise HTTPException(status_code=400, detail="Email ya registrado")
 
-    # Save the password as a hash, not as plain text.
+    # The password is stored as a hash instead of plain text.
     hashed_pwd = auth.get_password_hash(user.password)
     new_user = models.User(
         email=user.email, full_name=user.full_name, hashed_password=hashed_pwd
@@ -59,7 +59,7 @@ def update_current_user(
     db: Session = Depends(database.get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
-    """Update current user's profile"""
+    """Update the logged-in user's profile fields."""
     if user_update.email and user_update.email != current_user.email:
         existing = (
             db.query(models.User).filter(models.User.email == user_update.email).first()
@@ -76,12 +76,12 @@ def update_current_user(
     return current_user
 
 
-@router.delete("/me", status_code=204)  # ✅ Eliminar solo tu propio usuario
+@router.delete("/me", status_code=204)
 def delete_current_user(
     db: Session = Depends(database.get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
-    """Delete current user account"""
+    """Delete the logged-in user's account."""
     db.delete(current_user)
     db.commit()
     return None

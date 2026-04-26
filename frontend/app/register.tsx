@@ -39,6 +39,7 @@ export default function RegisterScreen(): React.ReactElement {
   ).current;
 
   useEffect(() => {
+    // Each raindrop runs its own loop to create the rainy background effect.
     const animations = rainAnimations.map((animValue) => {
       const duration = 800 + Math.random() * 1000;
       const delay = Math.random() * 2000;
@@ -66,6 +67,7 @@ export default function RegisterScreen(): React.ReactElement {
   }, []);
 
   const handleRegister = async () => {
+    // The form is checked locally before the new user is sent to the backend.
     if (!name || !email || !password || !confirmPassword) {
       Alert.alert("Error", "Por favor rellena todos los campos");
       return;
@@ -120,14 +122,16 @@ export default function RegisterScreen(): React.ReactElement {
     }
   };
 
-  // JSX styles
   return (
     <LinearGradient
       colors={["#0f172a", "#1e293b", "#020617"]}
       style={styles.container}
     >
-      <StatusBar barStyle="light-content" />
-      <Stack.Screen options={{ headerShown: false }} />
+      <StatusBar
+        barStyle="light-content"
+        translucent={true}
+        backgroundColor="transparent"
+      />
 
       <View style={StyleSheet.absoluteFill} pointerEvents="none">
         {rainAnimations.map((anim, index) => {
@@ -309,7 +313,12 @@ const styles = StyleSheet.create({
     zIndex: 10,
     padding: 10,
     backgroundColor: "rgba(255,255,255,0.1)",
-    borderRadius: 20,
+    borderRadius: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 5,
+    elevation: 2,
   },
   header: {
     alignItems: "center",

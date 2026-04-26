@@ -1,4 +1,4 @@
-// This interface describes the weather object used in the frontend.
+// This interface describes the weather object used by frontend screens.
 export interface WeatherData {
   city: string;
   temperature: number;
@@ -7,7 +7,7 @@ export interface WeatherData {
   icon: string;
 }
 
-// This interface describes the token response after login.
+// This interface describes the token payload returned after login.
 export interface LoginResponse {
   access_token: string;
   token_type: string;

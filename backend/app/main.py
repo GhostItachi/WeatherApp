@@ -1,23 +1,23 @@
 from fastapi import FastAPI
 from dotenv import load_dotenv
 
-# Load environment variables before the app uses them.
+# Environment variables are loaded before routers and auth use them.
 load_dotenv()
 
 from .database import engine, Base
 from .routers import users, weather
 
-# Create database tables if they do not exist yet.
+# Tables are created on startup if they do not exist yet.
 Base.metadata.create_all(bind=engine)
 
-# Create the FastAPI application instance.
+# This is the main FastAPI application object.
 app = FastAPI(title="WeatherApp API")
 
-# Register the routers so their endpoints become part of the API.
+# Each router adds its own endpoints to the main app.
 app.include_router(users.router)
 app.include_router(weather.router)
 
 @app.get("/")
 def root():
-    # Simple test route to confirm the API is running.
+    # This route is a simple health message for quick checks.
     return {"message": "Bienvenido a la API de WeatherApp"}

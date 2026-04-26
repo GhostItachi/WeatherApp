@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -11,13 +11,13 @@ import {
   Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Stack, useRouter } from "expo-router";
+import { Stack, useRouter, useFocusEffect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import apiClient from "../src/api/client";
 import * as Location from "expo-location";
-
+import { getWeatherTheme } from "../src/constants/themes";
 const { width } = Dimensions.get("window");
 
 export default function ProfileScreen(): React.ReactElement {
@@ -25,24 +25,75 @@ export default function ProfileScreen(): React.ReactElement {
 
   // userData stores the profile returned by the backend.
   const [userData, setUserData] = useState<any>(null);
-  // loading controls the first loading screen.
+  // loading controls the first profile load.
   const [loading, setLoading] = useState<boolean>(true);
-  // currentCity stores the device city name from reverse geocoding.
+  // currentCity stores the city name from device reverse geocoding.
   const [currentCity, setCurrentCity] = useState<string>("Buscando...");
-  // locationData stores the weather summary shown in the stats card.
+  // locationData stores the local weather summary shown in the stats card.
   const [locationData, setLocationData] = useState({
     city: "Cargando...",
     temp: "--",
+    description: "",
   });
+  const [themeDesc, setThemeDesc] = useState("");
+  const [unit, setUnit] = useState<"metric" | "imperial">("metric");
 
-  // Initialization logic
+  const fetchFreshProfile = async () => {
+    try {
+      const token = await AsyncStorage.getItem("userToken");
+      if (!token) return;
+
+      const response = await apiClient.get("/users/me", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      setUserData(response.data);
+      await AsyncStorage.setItem(
+        "user_data_cache",
+        JSON.stringify(response.data),
+      );
+    } catch (error) {
+      console.warn("Error al refrescar perfil:", error);
+    }
+  };
+
+  useFocusEffect(
+    useCallback(() => {
+      const syncThemeAndData = async () => {
+        // On focus, the screen restores the latest weather description for theming.
+        const lastDesc = await AsyncStorage.getItem("last_weather_description");
+
+        if (lastDesc) {
+          setThemeDesc(lastDesc);
+        } else {
+          // The cached weather object is used as a fallback if the direct value is missing.
+          const cachedLoc = await AsyncStorage.getItem(
+            "location_weather_cache",
+          );
+          if (cachedLoc) {
+            const parsed = JSON.parse(cachedLoc);
+            setThemeDesc(parsed.description || "");
+          }
+        }
+      };
+
+      syncThemeAndData();
+
+      if (!loading) {
+        fetchFreshProfile();
+      }
+    }, [loading]),
+  );
+  const currentTheme = getWeatherTheme(themeDesc);
+
+  // First load uses cache for speed and then refreshes the profile and local weather.
   useEffect(() => {
     const initializeProfile = async () => {
-      // Track cache existence to prevent accidental logouts
+      // Cache is tracked so the app can avoid logging out on temporary failures.
       let hasDataInCache = false;
 
       try {
-        // 1. Load cached profile data first for immediate visual feedback.
+        // Cached data is shown first to make the screen feel faster.
         const [cachedUser, cachedLoc] = await Promise.all([
           AsyncStorage.getItem("user_data_cache"),
           AsyncStorage.getItem("location_weather_cache"),
@@ -54,14 +105,13 @@ export default function ProfileScreen(): React.ReactElement {
         }
         if (cachedLoc) setLocationData(JSON.parse(cachedLoc));
 
-        // If we have cache, we can stop showing the main spinner.
+        // When cache exists, the main loader can stop before the network finishes.
         if (cachedUser) setLoading(false);
 
-        // 2. Token validation.
         const token = await AsyncStorage.getItem("userToken");
         if (!token) return router.replace("/");
 
-        // 3. Fetch data using a single location request to optimize performance.
+        // The profile request runs in parallel with the local weather flow.
         const profilePromise = apiClient.get("/users/me", {
           headers: { Authorization: `Bearer ${token}` },
         });
@@ -70,10 +120,8 @@ export default function ProfileScreen(): React.ReactElement {
 
         const profileRes = await profilePromise;
 
-        // 4. Update state and persistence with fresh data.
         setUserData(profileRes.data);
 
-        // -Improved handling based on the new errorType
         if (freshLocationData) {
           if (freshLocationData.errorType === "permission_denied") {
             Alert.alert(
@@ -88,7 +136,9 @@ export default function ProfileScreen(): React.ReactElement {
             setLocationData({
               city: freshLocationData.weather.city,
               temp: freshLocationData.weather.temp,
+              description: freshLocationData.weather.description,
             });
+            setThemeDesc(freshLocationData.weather.description);
 
             await AsyncStorage.setItem(
               "location_weather_cache",
@@ -102,8 +152,8 @@ export default function ProfileScreen(): React.ReactElement {
           JSON.stringify(profileRes.data),
         );
       } catch (error) {
-        console.error("Initialization error:", error);
-        // Only logout if there's no cached data to show
+        console.warn("Initialization error:", error);
+        // Logout is used only when there is no cached profile to display.
         if (!hasDataInCache) {
           handleLogout();
         } else {
@@ -115,13 +165,18 @@ export default function ProfileScreen(): React.ReactElement {
     };
 
     initializeProfile();
+
+    const loadUnitPreference = async () => {
+      const savedUnit = await AsyncStorage.getItem("userUnit");
+      if (savedUnit) setUnit(savedUnit as "metric" | "imperial");
+    };
+    loadUnitPreference();
   }, []);
 
-  // Added a more explicit return structure to handle different failure modes
-  // Helper to distinguish between permission, network or geocoding errors.
+  // This result type makes location failures easier to handle in the UI.
   interface UnifiedLocationResult {
     cityName: string;
-    weather: { city: string; temp: string } | null;
+    weather: { city: string; temp: string; description: string } | null;
     errorType:
       | "none"
       | "permission_denied"
@@ -130,7 +185,7 @@ export default function ProfileScreen(): React.ReactElement {
       | "unknown";
   }
 
-  // Helper to get location, city name and weather in one flow
+  // This helper resolves city name and weather in one location request flow.
   const fetchUnifiedLocationAndWeather =
     async (): Promise<UnifiedLocationResult> => {
       try {
@@ -167,7 +222,7 @@ export default function ProfileScreen(): React.ReactElement {
         let weatherData = null;
         let hasError = false;
 
-        // Handle Geocoding result independently
+        // Geocoding and weather are handled separately so one failure does not block the other.
         if (results[0].status === "fulfilled") {
           const geocode = results[0].value;
           if (geocode && geocode.length > 0) {
@@ -178,20 +233,21 @@ export default function ProfileScreen(): React.ReactElement {
               "Desconocida";
           }
         } else {
-          console.error("Geocoding failed:", results[0].reason);
+          console.warn("Geocoding failed:", results[0].reason);
           cityName = "Error de nombre";
           hasError = true;
         }
 
-        // Handle Weather API result independently
         if (results[1].status === "fulfilled") {
           const res = results[1].value;
           weatherData = {
             city: res.data.city,
             temp: `${Math.round(res.data.temperature)}°C`,
+            description: res.data.description,
           };
+          setThemeDesc(res.data.description);
         } else {
-          console.error("Weather API failed:", results[1].reason);
+          console.warn("Weather API failed:", results[1].reason);
           hasError = true;
         }
 
@@ -201,19 +257,37 @@ export default function ProfileScreen(): React.ReactElement {
           errorType: hasError ? "partial_success" : "none",
         };
       } catch (e) {
-        console.error("Error in unified location flow:", e);
+        console.warn("Error in unified location flow:", e);
         return { cityName: "Error", weather: null, errorType: "unknown" };
       }
     };
 
+  const formatLocalTemp = (tempStr: string) => {
+    if (tempStr === "--") return "--";
+    // The cached value is a string like "25°C", so the numeric part is extracted first.
+    const numericTemp = parseInt(tempStr);
+    if (isNaN(numericTemp)) return tempStr;
+
+    if (unit === "imperial") {
+      const tempF = Math.round((numericTemp * 9) / 5 + 32);
+      return `${tempF}°F`;
+    }
+    return `${numericTemp}°C`;
+  };
+
   const handleLogout = async () => {
     try {
-      // Remove the token and send the user back to the login screen.
+      // Logout removes the token and returns the user to the login screen.
       await AsyncStorage.removeItem("userToken");
       router.replace("/");
     } catch (e) {
       Alert.alert("Error", "No se pudo cerrar la sesión");
     }
+  };
+
+  const toggleUnit = async (newUnit: "metric" | "imperial") => {
+    setUnit(newUnit);
+    await AsyncStorage.setItem("userUnit", newUnit);
   };
 
   const userEmail =
@@ -230,7 +304,7 @@ export default function ProfileScreen(): React.ReactElement {
           { justifyContent: "center", alignItems: "center" },
         ]}
       >
-        {/* Show a spinner while profile and location data are loading. */}
+        {/* A simple loader is shown while the profile screen is still preparing data. */}
         <ActivityIndicator size="large" color="#3b82f6" />
         <Text style={{ marginTop: 10, color: "#64748b" }}>
           Cargando perfil y ubicación...
@@ -241,12 +315,10 @@ export default function ProfileScreen(): React.ReactElement {
 
   return (
     <SafeAreaView style={styles.container}>
-      <Stack.Screen options={{ headerShown: false }} />
-
       <ScrollView showsVerticalScrollIndicator={false}>
-        {/* Header with avatar, user name, and quick buttons. */}
+        {/* The header shows the user identity and quick navigation actions. */}
         <LinearGradient
-          colors={["#3b82f6", "#60a5fa"]}
+          colors={currentTheme.primary}
           style={styles.headerGradient}
         >
           <View style={styles.topButtons}>
@@ -254,10 +326,13 @@ export default function ProfileScreen(): React.ReactElement {
               style={styles.iconBtn}
               onPress={() => router.back()}
             >
-              <Ionicons name="chevron-back" size={24} color="#fff" />
+              <Ionicons name="chevron-back" size={24} color="#000000" />
             </TouchableOpacity>
-            <TouchableOpacity style={styles.iconBtn}>
-              <Ionicons name="settings-outline" size={24} color="#fff" />
+            <TouchableOpacity
+              style={styles.iconBtn}
+              onPress={() => router.push("/settings")}
+            >
+              <Ionicons name="settings-outline" size={24} color="#000000" />
             </TouchableOpacity>
           </View>
 
@@ -281,7 +356,7 @@ export default function ProfileScreen(): React.ReactElement {
           </View>
         </LinearGradient>
 
-        {/* These cards show favorites, local weather, and status. */}
+        {/* These cards summarize favorites, local weather, and account status. */}
         <View style={styles.statsRow}>
           <View style={styles.statCard}>
             <Ionicons name="heart-outline" size={24} color="#3b82f6" />
@@ -292,8 +367,10 @@ export default function ProfileScreen(): React.ReactElement {
           </View>
 
           <View style={styles.statCard}>
-            <Text style={styles.tempText}>{locationData.temp}</Text>
-            {/* Using currentCity to show the geocoded city name */}
+            <Text style={styles.tempText}>
+              {formatLocalTemp(locationData.temp)}
+            </Text>
+            {/* currentCity has priority because it comes from reverse geocoding. */}
             <Text style={styles.statValueSmall} numberOfLines={1}>
               {currentCity !== "Buscando..." ? currentCity : locationData.city}
             </Text>
@@ -307,20 +384,24 @@ export default function ProfileScreen(): React.ReactElement {
           </View>
         </View>
 
-        {/* Short biography section. */}
+        {/* This section shows the saved biography or a fallback message. */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Biografía</Text>
           <View style={styles.bioContainer}>
             <Text style={styles.bioText}>
-              Entusiasta de la meteorología y cazador de tormentas aficionado.
-              Siempre buscando el sol.
+              {userData?.bio && userData.bio.trim() !== ""
+                ? userData.bio
+                : "No has añadido una biografía todavía. ¡Cuéntanos algo sobre ti!"}
             </Text>
           </View>
         </View>
 
-        {/* Menu with profile actions and logout. */}
+        {/* The menu gives access to profile editing, units, and logout. */}
         <View style={styles.menuSection}>
-          <TouchableOpacity style={styles.menuItem}>
+          <TouchableOpacity
+            style={styles.menuItem}
+            onPress={() => router.push("/edit-profile")}
+          >
             <View style={[styles.menuIcon, { backgroundColor: "#eff6ff" }]}>
               <Ionicons name="person-outline" size={22} color="#3b82f6" />
             </View>
@@ -328,17 +409,46 @@ export default function ProfileScreen(): React.ReactElement {
             <Ionicons name="chevron-forward" size={20} color="#cbd5e1" />
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.menuItem}>
-            <View style={[styles.menuIcon, { backgroundColor: "#ecfdf5" }]}>
-              <Ionicons
-                name="notifications-outline"
-                size={22}
-                color="#10b981"
-              />
+          <View style={styles.menuItem}>
+            <View style={[styles.menuIcon, { backgroundColor: "#f0f9ff" }]}>
+              <Ionicons name="options-outline" size={22} color="#0ea5e9" />
             </View>
-            <Text style={styles.menuText}>Notificaciones de Clima</Text>
-            <Ionicons name="chevron-forward" size={20} color="#cbd5e1" />
-          </TouchableOpacity>
+            <Text style={styles.menuText}>Unidades</Text>
+            <View style={styles.unitToggleContainer}>
+              <TouchableOpacity
+                style={[
+                  styles.unitBtn,
+                  unit === "metric" && styles.unitBtnActive,
+                ]}
+                onPress={() => toggleUnit("metric")}
+              >
+                <Text
+                  style={[
+                    styles.unitBtnText,
+                    unit === "metric" && styles.unitBtnTextActive,
+                  ]}
+                >
+                  °C
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.unitBtn,
+                  unit === "imperial" && styles.unitBtnActive,
+                ]}
+                onPress={() => toggleUnit("imperial")}
+              >
+                <Text
+                  style={[
+                    styles.unitBtnText,
+                    unit === "imperial" && styles.unitBtnTextActive,
+                  ]}
+                >
+                  °F
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
 
           <TouchableOpacity
             style={[styles.menuItem, { borderBottomWidth: 0 }]}
@@ -376,10 +486,15 @@ const styles = StyleSheet.create({
   iconBtn: {
     width: 40,
     height: 40,
-    borderRadius: 20,
-    backgroundColor: "rgba(255,255,255,0.2)",
+    borderRadius: 12,
+    backgroundColor: "#fff",
     justifyContent: "center",
     alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 5,
+    elevation: 2,
   },
   profileInfo: {
     alignItems: "center",
@@ -516,5 +631,51 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "500",
     color: "#334155",
+  },
+  unitToggleContainer: {
+    flexDirection: "row",
+    backgroundColor: "#f1f5f9",
+    borderRadius: 10,
+    padding: 4,
+  },
+  unitBtn: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+  },
+  unitBtnActive: {
+    backgroundColor: "#fff",
+    elevation: 2,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+  },
+  unitBtnText: {
+    fontSize: 12,
+    color: "#64748b",
+  },
+  unitBtnTextActive: {
+    color: "#0ea5e9",
+    fontWeight: "bold",
+  },
+  settingItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 15,
+    paddingHorizontal: 15,
+    backgroundColor: "#fff",
+    borderRadius: 15,
+    marginBottom: 12,
+  },
+  settingLabelContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  settingText: {
+    fontSize: 16,
+    fontWeight: "500",
+    color: "#334155",
+    marginLeft: 12,
   },
 });
