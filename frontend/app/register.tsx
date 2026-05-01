@@ -114,7 +114,7 @@ export default function RegisterScreen(): React.ReactElement {
       } else {
         Alert.alert(
           "Error de conexión",
-          "No se pudo conectar con el servidor. Verifica tu Wi-Fi.",
+          "No se pudo conectar con el servidor. Verifica tu conexión a Internet.",
         );
       }
     } finally {

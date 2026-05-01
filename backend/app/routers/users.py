@@ -85,3 +85,28 @@ def delete_current_user(
     db.delete(current_user)
     db.commit()
     return None
+
+
+@router.post("/change-password")
+def change_password(
+    pass_data: schemas.PasswordChange,
+    db: Session = Depends(database.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    """Cambia la contraseña del usuario autenticado verificando la anterior."""
+
+    # 1. Verificar que la contraseña actual sea correcta
+    if not auth.verify_password(pass_data.old_password, current_user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="La contraseña actual es incorrecta",
+        )
+
+    # 2. Hashear la nueva contraseña
+    new_hashed_password = auth.get_password_hash(pass_data.new_password)
+
+    # 3. Actualizar en la base de datos
+    current_user.hashed_password = new_hashed_password
+    db.commit()
+
+    return {"message": "Contraseña actualizada exitosamente"}

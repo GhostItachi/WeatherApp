@@ -5,6 +5,7 @@ export interface WeatherData {
   description: string;
   humidity: number;
   icon: string;
+  city_name?: string; // Normalized city name for deletion (e.g., "Madrid, ES")
 }
 
 // This interface describes the token payload returned after login.

@@ -7,9 +7,11 @@ import {
   ScrollView,
   Alert,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Stack, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import apiClient from "../src/api/client";
 
 export default function SettingsScreen() {
   const router = useRouter();
@@ -22,19 +24,76 @@ export default function SettingsScreen() {
     );
   };
 
-  const handleDeleteAccount = () => {
+  const handleClearCache = async () => {
+    try {
+      // Definimos qué claves queremos purgar
+      const keysToRemove = [
+        "user_data_cache",
+        "location_weather_cache",
+        "last_weather_description",
+      ];
+
+      await AsyncStorage.multiRemove(keysToRemove);
+
+      Alert.alert(
+        "Mantenimiento",
+        "Se han eliminado los datos temporales. La próxima vez que entres a tu perfil, se descargarán datos frescos del servidor.",
+        [{ text: "Entendido" }],
+      );
+    } catch (e) {
+      Alert.alert("Error", "No se pudo limpiar el caché local.");
+    }
+  };
+
+  const handleDeleteAccount = async () => {
     Alert.alert(
-      "Eliminar Cuenta",
-      "¿Estás seguro de que deseas eliminar tu cuenta de forma permanente? Esta acción no se puede deshacer.",
+      "Acción Irreversible",
+      "¿Realmente deseas eliminar tu cuenta? Todos tus datos se borrarán permanentemente de nuestros servidores.",
       [
         { text: "Cancelar", style: "cancel" },
         {
-          text: "Eliminar",
+          text: "Eliminar definitivamente",
           style: "destructive",
-          onPress: () => console.log("Cuenta eliminada"),
+          onPress: async () => {
+            try {
+              const token = await AsyncStorage.getItem("userToken");
+
+              // 1. Petición al endpoint DELETE /users/me que ya tienes en el backend
+              await apiClient.delete("/users/me", {
+                headers: { Authorization: `Bearer ${token}` },
+              });
+
+              // 2. Limpieza total de persistencia local
+              await AsyncStorage.clear();
+
+              // 3. Redirección al Login
+              router.replace("/");
+            } catch (error) {
+              console.error(error);
+              Alert.alert(
+                "Error",
+                "No se pudo eliminar la cuenta. Inténtalo más tarde.",
+              );
+            }
+          },
         },
       ],
     );
+  };
+
+  const handleLogout = async () => {
+    Alert.alert("Cerrar Sesión", "¿Estás seguro de que deseas salir?", [
+      { text: "Cancelar", style: "cancel" },
+      {
+        text: "Cerrar Sesión",
+        onPress: async () => {
+          await AsyncStorage.removeItem("userToken");
+          // Opcional: limpiar caché de usuario pero dejar preferencias de la app
+          await AsyncStorage.removeItem("user_data_cache");
+          router.replace("/");
+        },
+      },
+    ]);
   };
 
   return (
@@ -59,7 +118,7 @@ export default function SettingsScreen() {
           <SettingItem
             icon="key-outline"
             label="Cambiar Contraseña"
-            onPress={() => handleAction("Cambiar Contraseña")}
+            onPress={() => router.push("/change-password")}
           />
           <SettingItem
             icon="shield-checkmark-outline"
@@ -79,7 +138,7 @@ export default function SettingsScreen() {
           <SettingItem
             icon="trash-bin-outline"
             label="Limpiar Caché de la App"
-            onPress={() => handleAction("Limpiar Caché")}
+            onPress={() => handleClearCache()}
           />
         </View>
 
@@ -94,7 +153,7 @@ export default function SettingsScreen() {
           <SettingItem
             icon="information-circle-outline"
             label="Acerca de la Aplicación"
-            onPress={() => handleAction("Acerca de")}
+            onPress={() => router.push("/about")}
           />
         </View>
 
@@ -116,9 +175,12 @@ export default function SettingsScreen() {
           </TouchableOpacity>
         </View>
 
-        <Text style={styles.versionText}>
-          Versión 1.0.2 - Proyecto Ingeniería
-        </Text>
+        <View style={styles.footerInfo}>
+          <Text style={styles.footerVersion}>Build Version: 1.0.2-2026</Text>
+          <Text style={styles.footerEnvironment}>
+            Entorno: Production (v1.0)
+          </Text>
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -217,5 +279,21 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 40,
     marginBottom: 20,
+  },
+  footerInfo: {
+    marginTop: 40,
+    marginBottom: 20,
+    alignItems: "center",
+  },
+  footerVersion: {
+    color: "#94a3b8",
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  footerEnvironment: {
+    color: "#cbd5e1",
+    fontSize: 10,
+    textTransform: "uppercase",
+    letterSpacing: 1,
   },
 });

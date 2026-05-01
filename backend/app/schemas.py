@@ -50,6 +50,11 @@ class UserOut(UserBase):
         from_attributes = True
 
 
+class PasswordChange(BaseModel):
+    old_password: str
+    new_password: str
+
+
 # This schema defines the weather payload returned to the frontend.
 class WeatherResponse(BaseModel):
     city: str
@@ -60,3 +65,8 @@ class WeatherResponse(BaseModel):
     pressure: int
     wind_speed: float
     icon: str
+
+
+# This schema includes the normalized city name for favorites deletion
+class FavoriteWeatherResponse(WeatherResponse):
+    city_name: str  # Normalized name (e.g., "Madrid, ES") for deletion

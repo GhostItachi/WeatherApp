@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import {
   View,
   Text,
@@ -22,6 +22,7 @@ const { width } = Dimensions.get("window");
 
 export default function ProfileScreen(): React.ReactElement {
   const router = useRouter();
+  const initialProfileLoadedRef = useRef(false);
 
   // userData stores the profile returned by the backend.
   const [userData, setUserData] = useState<any>(null);
@@ -38,7 +39,7 @@ export default function ProfileScreen(): React.ReactElement {
   const [themeDesc, setThemeDesc] = useState("");
   const [unit, setUnit] = useState<"metric" | "imperial">("metric");
 
-  const fetchFreshProfile = async () => {
+  const fetchFreshProfile = useCallback(async () => {
     try {
       const token = await AsyncStorage.getItem("userToken");
       if (!token) return;
@@ -55,7 +56,7 @@ export default function ProfileScreen(): React.ReactElement {
     } catch (error) {
       console.warn("Error al refrescar perfil:", error);
     }
-  };
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
@@ -71,18 +72,23 @@ export default function ProfileScreen(): React.ReactElement {
             "location_weather_cache",
           );
           if (cachedLoc) {
-            const parsed = JSON.parse(cachedLoc);
-            setThemeDesc(parsed.description || "");
+            try {
+              const parsed = JSON.parse(cachedLoc);
+              setThemeDesc(parsed.description || "");
+            } catch (e) {
+              console.error("Corrupted cached location data:", e);
+              await AsyncStorage.removeItem("location_weather_cache");
+            }
           }
         }
       };
 
       syncThemeAndData();
 
-      if (!loading) {
+      if (initialProfileLoadedRef.current) {
         fetchFreshProfile();
       }
-    }, [loading]),
+    }, [fetchFreshProfile]),
   );
   const currentTheme = getWeatherTheme(themeDesc);
 
@@ -100,10 +106,22 @@ export default function ProfileScreen(): React.ReactElement {
         ]);
 
         if (cachedUser) {
-          setUserData(JSON.parse(cachedUser));
-          hasDataInCache = true;
+          try {
+            setUserData(JSON.parse(cachedUser));
+            hasDataInCache = true;
+          } catch (e) {
+            console.error("Corrupted user cache:", e);
+            await AsyncStorage.removeItem("user_data_cache");
+          }
         }
-        if (cachedLoc) setLocationData(JSON.parse(cachedLoc));
+        if (cachedLoc) {
+          try {
+            setLocationData(JSON.parse(cachedLoc));
+          } catch (e) {
+            console.error("Corrupted location cache:", e);
+            await AsyncStorage.removeItem("location_weather_cache");
+          }
+        }
 
         // When cache exists, the main loader can stop before the network finishes.
         if (cachedUser) setLoading(false);
@@ -160,6 +178,7 @@ export default function ProfileScreen(): React.ReactElement {
           Alert.alert("Aviso", "Error de conexión. Mostrando datos locales.");
         }
       } finally {
+        initialProfileLoadedRef.current = true;
         setLoading(false);
       }
     };
@@ -473,6 +492,8 @@ const styles = StyleSheet.create({
     backgroundColor: "#f8fafc",
   },
   headerGradient: {
+    borderTopLeftRadius: 30,
+    borderTopRightRadius: 30,
     paddingBottom: 40,
     borderBottomLeftRadius: 30,
     borderBottomRightRadius: 30,
@@ -596,6 +617,7 @@ const styles = StyleSheet.create({
     borderRadius: 15,
     borderLeftWidth: 4,
     borderLeftColor: "#3b82f6",
+    elevation: 2,
   },
   bioText: {
     color: "#475569",
@@ -609,6 +631,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     paddingVertical: 10,
     marginBottom: 40,
+    elevation: 2,
   },
   menuItem: {
     flexDirection: "row",

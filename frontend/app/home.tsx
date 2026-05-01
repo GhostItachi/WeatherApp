@@ -36,11 +36,20 @@ interface WeatherData {
   pressure: number;
   wind_speed: number;
   icon: string;
+  city_name?: string; // Normalized city name for deletion (e.g., "Madrid, ES")
+}
+// 1. Define la estructura de la ciudad
+interface CitySuggestion {
+  id: number | string;
+  name: string;
+  country: string;
+  state?: string; // El ? significa que puede ser nulo o no venir
+  lat: number;
+  lon: number;
 }
 
 export default function HomeScreen(): React.ReactElement {
   const router = useRouter();
-
   // currentWeather stores the weather shown in the main location card.
   const [currentWeather, setCurrentWeather] = useState<WeatherData | null>(
     null,
@@ -56,7 +65,7 @@ export default function HomeScreen(): React.ReactElement {
   // These states control the search modal and suggestion list.
   const [searchVisible, setSearchVisible] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [suggestions, setSuggestions] = useState<CitySuggestion[]>([]);
   const [searching, setSearching] = useState(false);
 
   const [selectedFavWeather, setSelectedFavWeather] =
@@ -119,15 +128,22 @@ export default function HomeScreen(): React.ReactElement {
         return;
       }
 
-      const location = await Location.getCurrentPositionAsync({});
+      const location = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
       const { latitude, longitude } = location.coords;
-
+      if (!latitude || !longitude) {
+        throw new Error("Coordenadas inválidas");
+      }
       const response = await apiClient.get("/weather/current-coord", {
-        params: { lat: latitude, lon: longitude },
+        params: { lat: latitude.toString(), lon: longitude.toString() },
       });
 
       setCurrentWeather(response.data);
-      await AsyncStorage.setItem("last_weather_description", response.data.description);
+      await AsyncStorage.setItem(
+        "last_weather_description",
+        response.data.description,
+      );
     } catch (error) {
       setCurrentWeather(null);
       console.warn("No fue posible actualizar el clima actual:", error);
@@ -180,15 +196,25 @@ export default function HomeScreen(): React.ReactElement {
   const handleSearchTextChange = async (text: string) => {
     setSearchQuery(text);
     if (text.length >= 2) {
+      setSearching(true);
       try {
         // The backend returns short city suggestions for the search modal.
         const response = await apiClient.get(`/weather/search-suggestions`, {
           params: { q: text },
         });
-        setSuggestions(response.data);
+        const formattedData = response.data.map((city: any, index: number) => ({
+          id: city.id || index,
+          name: city.name || city,
+          country: city.country || "N/A",
+          state: city.state || "",
+          lat: city.lat || 0,
+          lon: city.lon || 0,
+        }));
+        setSuggestions(formattedData);
       } catch (e) {
-        // If suggestions fail, the modal simply shows an empty list.
         setSuggestions([]);
+      } finally {
+        setSearching(false);
       }
     } else {
       setSuggestions([]);
@@ -200,28 +226,59 @@ export default function HomeScreen(): React.ReactElement {
     setDetailsModalVisible(true);
   };
 
-  const selectCity = async (cityName: string) => {
+  const removeFavorite = async (cityName: string) => {
+    try {
+      const token = await AsyncStorage.getItem("userToken");
+      await apiClient.delete(`/weather/favorites/${cityName}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      // Actualizamos la lista local inmediatamente para mejorar la UX
+      if (token) fetchFavorites(token);
+
+      Alert.alert("Eliminado", `${cityName} ha sido quitada de tus favoritos.`);
+    } catch (error) {
+      console.error("Error al eliminar favorito:", error);
+      Alert.alert("Error", "No se pudo eliminar la ciudad.");
+    }
+  };
+
+  const selectCity = async (city: CitySuggestion) => {
     setSearching(true);
     try {
       const token = await AsyncStorage.getItem("userToken");
-      const res = await apiClient.get(`/weather/current/${cityName}`);
-
+      const res = await apiClient.get("/weather/current-coord", {
+        params: { lat: city.lat, lon: city.lon },
+      });
+      const uniqueCityName = `${city.name}, ${city.country}`;
       Alert.alert(
-        `${res.data.city}: ${Math.round(res.data.temperature)}°C`,
+        `${uniqueCityName}: ${Math.round(res.data.temperature)}°C`,
         `¿Deseas agregar esta ciudad a tus favoritos?`,
         [
           { text: "Cerrar", style: "cancel" },
           {
             text: "Agregar",
             onPress: async () => {
-              await apiClient.post(
-                "/weather/favorites",
-                { city_name: res.data.city },
-                { headers: { Authorization: `Bearer ${token}` } },
-              );
-              fetchFavorites(token!);
-              setSearchVisible(false);
-              setSearchQuery("");
+              try {
+                await apiClient.post(
+                  "/weather/favorites",
+                  { city_name: uniqueCityName },
+                  { headers: { Authorization: `Bearer ${token}` } },
+                );
+                if (token) fetchFavorites(token);
+                setSearchVisible(false);
+                setSearchQuery("");
+                Alert.alert(
+                  "Éxito",
+                  `${res.data.city} se añadió a tus favoritos.`,
+                );
+              } catch (error: any) {
+                const errorMessage =
+                  error.response?.data?.detail ||
+                  "No se pudo agregar la ciudad a favoritos.";
+                const isDuplicate = error.response?.status === 400;
+                Alert.alert(isDuplicate ? "Aviso" : "Error", errorMessage);
+              }
             },
           },
         ],
@@ -267,8 +324,7 @@ export default function HomeScreen(): React.ReactElement {
         color: "#6366f1",
         bg: "#e0e7ff",
       };
-    }
-    else if (temperature >= 30) {
+    } else if (temperature >= 30) {
       return {
         title: "Temperatura alta",
         desc: "Mantente hidratado y usa protector solar si sales.",
@@ -276,8 +332,7 @@ export default function HomeScreen(): React.ReactElement {
         color: "#ef4444",
         bg: "#fee2e2",
       };
-    }
-    else if (temperature <= 16) {
+    } else if (temperature <= 16) {
       return {
         title: "Clima frío",
         desc: "Abrígate bien antes de salir de casa.",
@@ -285,8 +340,7 @@ export default function HomeScreen(): React.ReactElement {
         color: "#0ea5e9",
         bg: "#e0f2fe",
       };
-    }
-    else if (wind_speed >= 10) {
+    } else if (wind_speed >= 10) {
       return {
         title: "Vientos fuertes",
         desc: "Precaución con ráfagas de viento en tu zona.",
@@ -294,8 +348,7 @@ export default function HomeScreen(): React.ReactElement {
         color: "#10b981",
         bg: "#d1fae5",
       };
-    }
-    else {
+    } else {
       return {
         title: "Clima agradable",
         desc: "Excelente día para realizar actividades al aire libre.",
@@ -323,61 +376,105 @@ export default function HomeScreen(): React.ReactElement {
       </View>
 
       {/* This modal lets the user search cities and add one to favorites. */}
-      <Modal visible={searchVisible} animationType="fade" transparent={true}>
+      <Modal visible={searchVisible} animationType="slide" transparent={true}>
         <View style={styles.modalOverlay}>
           <View style={styles.searchContainer}>
-            <View style={styles.searchInputWrapper}>
-              <Ionicons name="search-outline" size={20} color="#64748b" />
-              <TextInput
-                placeholder="Buscar ciudad (ej: Maicao)"
-                style={styles.searchInput}
-                value={searchQuery}
-                onChangeText={handleSearchTextChange}
-                autoFocus
-              />
+            {/* HEADER DEL MODAL */}
+            <View style={styles.searchHeader}>
+              <View style={styles.searchInputWrapper}>
+                <Ionicons name="search" size={20} color="#3b82f6" />
+                <TextInput
+                  placeholder="Buscar ciudad..."
+                  placeholderTextColor="#94a3b8"
+                  style={styles.searchInput}
+                  value={searchQuery}
+                  onChangeText={handleSearchTextChange}
+                  autoFocus
+                />
+                {searchQuery.length > 0 && (
+                  <TouchableOpacity onPress={() => setSearchQuery("")}>
+                    <Ionicons name="close-circle" size={20} color="#cbd5e1" />
+                  </TouchableOpacity>
+                )}
+              </View>
               <TouchableOpacity
                 onPress={() => {
                   setSearchVisible(false);
                   setSearchQuery("");
                 }}
+                style={styles.cancelBtn}
               >
-                <Text style={{ color: "#ef4444", fontWeight: "600" }}>
-                  Cerrar
-                </Text>
+                <Text style={styles.cancelText}>Cancelar</Text>
               </TouchableOpacity>
             </View>
 
-            {searching ? (
-              <ActivityIndicator style={{ marginTop: 20 }} color="#0ea5e9" />
-            ) : (
-              <FlatList
-                data={suggestions}
-                keyExtractor={(item: string) => item}
-                renderItem={({ item }: { item: string }) => (
-                  <TouchableOpacity
-                    style={styles.suggestionItem}
-                    onPress={() => selectCity(item)}
-                  >
-                    <Ionicons
-                      name="location-outline"
-                      size={18}
-                      color="#94a3b8"
-                    />
-                    <Text style={styles.suggestionText}>{item}</Text>
-                    <Ionicons
-                      name="add-circle-outline"
-                      size={20}
-                      color="#0ea5e9"
-                    />
-                  </TouchableOpacity>
-                )}
-                ListEmptyComponent={
-                  searchQuery.length > 2 ? (
-                    <Text style={styles.emptyText}>No hay resultados</Text>
-                  ) : null
-                }
-              />
-            )}
+            {/* CUERPO DE RESULTADOS */}
+            <View style={styles.resultsBody}>
+              {searching ? (
+                <View style={styles.loaderContainer}>
+                  <ActivityIndicator size="large" color="#3b82f6" />
+                  <Text style={styles.loaderTextSearch}>
+                    Buscando en el mapa...
+                  </Text>
+                </View>
+              ) : (
+                <FlatList
+                  data={suggestions}
+                  keyExtractor={(item, index) =>
+                    item.id?.toString() || index.toString()
+                  } // Supone que tu API devuelve objetos, no solo strings
+                  renderItem={({ item }: { item: CitySuggestion }) => (
+                    <TouchableOpacity
+                      style={styles.suggestionItemSearch} // Usamos el estilo correcto con padding
+                      onPress={() => selectCity(item)}
+                    >
+                      <View style={styles.suggestionIcon}>
+                        <Ionicons
+                          name="location-sharp"
+                          size={20}
+                          color="#64748b"
+                        />
+                      </View>
+                      <View style={styles.suggestionInfo}>
+                        <Text style={styles.suggestionTextSearch}>
+                          {item.name}
+                        </Text>
+                        <Text style={styles.suggestionSubtext}>
+                          {item.country}
+                          {item.state ? `, ${item.state}` : ""}
+                        </Text>
+                      </View>
+                      <Ionicons
+                        name="heart-outline"
+                        size={24}
+                        color="#3b82f6"
+                      />
+                    </TouchableOpacity>
+                  )}
+                  ListEmptyComponent={
+                    searchQuery.length > 2 ? (
+                      <View style={styles.emptyContainer}>
+                        <Ionicons
+                          name="map-outline"
+                          size={50}
+                          color="#e2e8f0"
+                        />
+                        <Text style={styles.emptyTextSearch}>
+                          No encontramos esa ciudad
+                        </Text>
+                      </View>
+                    ) : (
+                      <View style={styles.emptyContainer}>
+                        <Text style={styles.historyTitle}>
+                          RECIENTES RESULTADOS
+                        </Text>
+                        {/* Aquí podrías mapear ciudades por defecto */}
+                      </View>
+                    )
+                  }
+                />
+              )}
+            </View>
           </View>
         </View>
       </Modal>
@@ -402,7 +499,7 @@ export default function HomeScreen(): React.ReactElement {
             <View style={styles.mainCardHeader}>
               <View>
                 <Text style={styles.cityText}>{currentWeather.city}</Text>
-                <Text style={styles.descriptionText}>
+                <Text style={styles.descriptionText} numberOfLines={2}>
                   {currentWeather.description}
                 </Text>
                 <View style={styles.tempRow}>
@@ -488,7 +585,7 @@ export default function HomeScreen(): React.ReactElement {
         {/* Favorite cities are listed here, and each row can open a details modal. */}
         <View style={[styles.sectionCard, { marginBottom: 30 }]}>
           <Text style={[styles.sectionTitle, { marginBottom: 10 }]}>
-            Otras ubicaciones
+            Tus Cuidades Favoritas
           </Text>
           {favorites.length > 0 ? (
             favorites.map((item, index) => (
@@ -525,6 +622,26 @@ export default function HomeScreen(): React.ReactElement {
                 >
                   <Ionicons name="chevron-forward" size={24} color="#94a3b8" />
                 </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => {
+                    Alert.alert(
+                      "Eliminar favorito",
+                      `¿Estás seguro de que quieres quitar ${item.city}?`,
+                      [
+                        { text: "Cancelar", style: "cancel" },
+                        {
+                          text: "Eliminar",
+                          style: "destructive",
+                          onPress: () =>
+                            removeFavorite(item.city_name || item.city),
+                        },
+                      ],
+                    );
+                  }}
+                  style={[styles.detailsIconBtn, { marginLeft: 10 }]}
+                >
+                  <Ionicons name="trash-outline" size={22} color="#ef4444" />
+                </TouchableOpacity>
               </View>
             ))
           ) : (
@@ -546,7 +663,7 @@ export default function HomeScreen(): React.ReactElement {
             {selectedFavWeather && (
               <>
                 <LinearGradient
-                  colors={["#0ea5e9", "#2563eb"]}
+                  colors={currentTheme.primary}
                   style={styles.modalHeaderGradient}
                 >
                   <TouchableOpacity
@@ -604,6 +721,32 @@ export default function HomeScreen(): React.ReactElement {
                       </Text>
                     </View>
                   </View>
+                  <TouchableOpacity
+                    style={styles.deleteBtnModal}
+                    onPress={() => {
+                      Alert.alert(
+                        "Eliminar Ciudad",
+                        `¿Deseas quitar ${selectedFavWeather?.city} de tus favoritos?`,
+                        [
+                          { text: "Cancelar", style: "cancel" },
+                          {
+                            text: "Sí, eliminar",
+                            style: "destructive",
+                            onPress: () =>
+                              removeFavorite(
+                                selectedFavWeather!.city_name ||
+                                  selectedFavWeather!.city,
+                              ),
+                          },
+                        ],
+                      );
+                    }}
+                  >
+                    <Ionicons name="trash-outline" size={20} color="#ef4444" />
+                    <Text style={styles.deleteBtnText}>
+                      Eliminar de mis favoritos
+                    </Text>
+                  </TouchableOpacity>
                 </View>
               </>
             )}
@@ -625,7 +768,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 20,
     paddingVertical: 10,
-    backgroundColor: "#fff",
+    backgroundColor: "transparent",
   },
   locationContainer: {
     alignItems: "center",
@@ -702,6 +845,11 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     padding: 15,
     marginBottom: 15,
+    elevation: 2,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 5,
   },
   sectionHeader: {
     flexDirection: "row",
@@ -786,36 +934,6 @@ const styles = StyleSheet.create({
     color: "#64748b",
     marginLeft: 4,
   },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
-    paddingTop: height * 0.1,
-  },
-  searchContainer: {
-    backgroundColor: "#fff",
-    marginHorizontal: 15,
-    borderRadius: 20,
-    maxHeight: height * 0.6,
-    padding: 15,
-    shadowColor: "#000",
-    shadowOpacity: 0.2,
-    shadowRadius: 10,
-    elevation: 5,
-  },
-  searchInputWrapper: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#f1f5f9",
-    borderRadius: 12,
-    paddingHorizontal: 10,
-    height: 50,
-  },
-  searchInput: {
-    flex: 1,
-    marginLeft: 10,
-    fontSize: 16,
-    color: "#1e293b",
-  },
   suggestionItem: {
     flexDirection: "row",
     alignItems: "center",
@@ -842,8 +960,9 @@ const styles = StyleSheet.create({
   descriptionText: {
     color: "#fff",
     fontSize: 16,
-    textTransform: "capitalize",
-    opacity: 0.8,
+    textTransform: "none",
+    opacity: 0.9,
+    flexShrink: 1,
   },
   weatherIconLarge: {
     width: 80,
@@ -992,5 +1111,137 @@ const styles = StyleSheet.create({
   detailsIconBtn: {
     padding: 10,
     marginLeft: 5,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(15, 23, 42, 0.6)", // Un azul oscuro traslúcido
+    justifyContent: "flex-end",
+  },
+  searchContainer: {
+    backgroundColor: "#fff",
+    height: "90%",
+    borderTopLeftRadius: 30,
+    borderTopRightRadius: 30,
+    paddingTop: 20,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: -5 },
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    elevation: 20,
+  },
+  searchHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 20,
+    paddingBottom: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f1f5f9",
+  },
+  searchInputWrapper: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#f8fafc",
+    borderRadius: 15,
+    paddingHorizontal: 15,
+    height: 50,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+  },
+  searchInput: {
+    flex: 1,
+    marginLeft: 10,
+    fontSize: 16,
+    color: "#1e293b",
+  },
+  cancelBtn: {
+    marginLeft: 15,
+  },
+  cancelText: {
+    color: "#3b82f6",
+    fontWeight: "600",
+    fontSize: 15,
+  },
+  suggestionItemSearch: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f8fafc",
+  },
+  suggestionIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: "#f1f5f9",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 15,
+  },
+  suggestionInfo: {
+    flex: 1,
+  },
+  suggestionTextSearch: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#1e293b",
+  },
+  suggestionSubtext: {
+    fontSize: 13,
+    color: "#94a3b8",
+  },
+  loaderContainer: {
+    marginTop: 50,
+    alignItems: "center",
+  },
+  loaderTextSearch: {
+    marginTop: 15,
+    color: "#64748b",
+    fontSize: 14,
+    textAlign: "center",
+  },
+  emptyContainer: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 60,
+    paddingHorizontal: 40,
+  },
+  emptyTextSearch: {
+    marginTop: 10,
+    color: "#94a3b8",
+    fontSize: 15,
+    textAlign: "center",
+  },
+  resultsBody: {
+    flex: 1, // Esto permite que la lista ocupe el resto del modal
+    paddingTop: 10,
+  },
+
+  historyTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#64748b",
+    textTransform: "uppercase",
+    letterSpacing: 1,
+    marginBottom: 15,
+    paddingHorizontal: 20,
+  },
+  deleteBtnModal: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#fef2f2",
+    paddingVertical: 15,
+    borderRadius: 15,
+    marginTop: 20,
+    borderWidth: 1,
+    borderColor: "#fee2e2",
+  },
+  deleteBtnText: {
+    color: "#ef4444",
+    fontWeight: "600",
+    fontSize: 16,
+    marginLeft: 10,
   },
 });

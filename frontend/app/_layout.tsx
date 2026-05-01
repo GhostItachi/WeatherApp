@@ -25,6 +25,8 @@ export default function Layout() {
         <Stack.Screen name="profile" options={{ title: "Perfil" }} />
         <Stack.Screen name="settings" options={{ title: "Configuración" }} />
         <Stack.Screen name="edit-profile" options={{ title: "Editar Perfil" }} />
+        <Stack.Screen name="change-password" options={{ title: "Cambiar Contraseña" }} />
+        <Stack.Screen name="about" options={{ title: "Información" }} />
       </Stack>
     </SafeAreaProvider>
   );

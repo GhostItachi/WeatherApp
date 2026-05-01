@@ -1,0 +1,42 @@
+const address = require('address');
+
+module.exports = ({ config }) => {
+  const localIp = address.ip ? address.ip() : 'localhost';
+  
+  console.log(`\n🚀 [SISTEMA] Backend detectado en: http://${localIp}:8000\n`);
+
+  return {
+    ...config,
+    name: "weatherapp",
+    slug: "weatherapp",
+    version: "1.0.0",
+    scheme: "weatherapp",
+    orientation: "portrait",
+    icon: "./assets/icon.png",
+    userInterfaceStyle: "light",
+    newArchEnabled: true,
+    splash: {
+      image: "./assets/splash-icon.png",
+      resizeMode: "contain",
+      backgroundColor: "#ffffff"
+    },
+    ios: {
+      supportsTablet: true
+    },
+    android: {
+      adaptiveIcon: {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      edgeToEdgeEnabled: true
+    },
+    web: {
+      favicon: "./assets/favicon.png"
+    },
+    plugins: ["expo-router"],
+    extra: {
+      ...config.extra,
+      backendIp: localIp
+    }
+  };
+};

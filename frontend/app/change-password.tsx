@@ -20,26 +20,21 @@ import apiClient from "../src/api/client";
 
 const { width, height } = Dimensions.get("window");
 
-export default function EditProfileScreen() {
+export default function ChangePasswordScreen() {
   const router = useRouter();
 
-  // These states store the editable profile fields and request status.
-  const [fullName, setFullName] = useState("");
-  const [email, setEmail] = useState("");
-  const [bio, setBio] = useState("");
-  const [loading, setLoading] = useState(false);
+  // Estados del formulario
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [updating, setUpdating] = useState(false);
-
-  // This state highlights the active input.
   const [focusedField, setFocusedField] = useState<string | null>(null);
 
-  // These animated values reuse the moving cloud background from the login screen.
+  // Animaciones de nubes (Reutilizando tu lógica de EditProfile)
   const cloud1Anim = useRef(new Animated.Value(width)).current;
   const cloud2Anim = useRef(new Animated.Value(width + 150)).current;
 
   useEffect(() => {
-    loadUserData();
-
     const animateCloud = (
       animValue: Animated.Value,
       duration: number,
@@ -66,60 +61,52 @@ export default function EditProfileScreen() {
     animateCloud(cloud2Anim, 20000, 5000);
   }, []);
 
-  const loadUserData = async () => {
-    // The current profile is loaded from the protected /users/me endpoint.
-    setLoading(true);
-    try {
-      const token = await AsyncStorage.getItem("userToken");
-      const response = await apiClient.get("/users/me", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      setFullName(response.data.full_name || "");
-      setEmail(response.data.email || "");
-      setBio(response.data.bio || "");
-    } catch (e: any) {
-      console.warn("Error cargando perfil:", e);
-      if (e.response?.status === 401) router.replace("/");
-    } finally {
-      setLoading(false);
+  const handleUpdatePassword = async () => {
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      Alert.alert("Error", "Todos los campos son obligatorios");
+      return;
     }
-  };
 
-  const handleUpdate = async () => {
-    // The form is validated first, then the updated fields are sent to the backend.
-    if (!fullName.trim() || !email.trim()) {
-      Alert.alert("Error", "El nombre y email son obligatorios");
+    if (newPassword !== confirmPassword) {
+      Alert.alert(
+        "Error",
+        "La nueva contraseña y la confirmación no coinciden",
+      );
+      return;
+    }
+
+    if (newPassword.length < 6) {
+      Alert.alert(
+        "Error",
+        "La nueva contraseña debe tener al menos 6 caracteres",
+      );
       return;
     }
 
     setUpdating(true);
     try {
       const token = await AsyncStorage.getItem("userToken");
-      await apiClient.put(
-        "/users/me",
-        { full_name: fullName, email: email, bio: bio },
+      await apiClient.post(
+        "/users/change-password",
+        { old_password: currentPassword, new_password: newPassword },
         { headers: { Authorization: `Bearer ${token}` } },
       );
-      Alert.alert("Éxito", "Perfil actualizado correctamente");
+      Alert.alert("Éxito", "Contraseña actualizada correctamente");
       router.back();
     } catch (error: any) {
-      Alert.alert("Error", "No se pudo actualizar el perfil");
+      const errorMsg =
+        error.response?.data?.detail || "No se pudo actualizar la contraseña";
+      Alert.alert("Error", errorMsg);
     } finally {
       setUpdating(false);
     }
   };
 
-  if (loading) {
-    return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" color="#3b82f6" />
-      </View>
-    );
-  }
-
   return (
     <View style={styles.container}>
-      {/* Animated clouds keep the same visual language as the auth screens. */}
+      <Stack.Screen options={{ headerShown: false }} />
+
+      {/* Nubes Animadas */}
       <Animated.View
         style={[
           styles.cloud,
@@ -146,103 +133,100 @@ export default function EditProfileScreen() {
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
         >
-          {/* This header explains the screen purpose and keeps the back action visible. */}
+          {/* Header con estilo unificado */}
           <View style={styles.header}>
-            <Ionicons name="person-circle" size={80} color="#3b82f6" />
-            <Text style={styles.title}>Edita tu perfil</Text>
+            <Text style={styles.title}>Seguridad</Text>
             <Text style={styles.subtitle}>
-              Mantén tu información actualizada
+              Actualiza tu contraseña de acceso
             </Text>
           </View>
 
-          {/* The form lets the user update name, email, and bio. */}
+          {/* Formulario */}
           <View style={styles.form}>
+            {/* Contraseña Actual */}
             <View
               style={[
                 styles.inputWrapper,
-                focusedField === "name" && styles.inputFocused,
+                focusedField === "current" && styles.inputFocused,
               ]}
             >
               <Ionicons
-                name="person-outline"
+                name="lock-closed-outline"
                 size={20}
                 color="#64748b"
                 style={styles.icon}
               />
               <TextInput
-                placeholder="Nombre completo"
+                placeholder="Contraseña actual"
                 placeholderTextColor="#94a3b8"
                 style={styles.input}
-                value={fullName}
-                onChangeText={setFullName}
-                onFocus={() => setFocusedField("name")}
+                value={currentPassword}
+                onChangeText={setCurrentPassword}
+                secureTextEntry
+                onFocus={() => setFocusedField("current")}
                 onBlur={() => setFocusedField(null)}
               />
             </View>
 
+            {/* Nueva Contraseña */}
             <View
               style={[
                 styles.inputWrapper,
-                focusedField === "email" && styles.inputFocused,
+                focusedField === "new" && styles.inputFocused,
               ]}
             >
               <Ionicons
-                name="mail-outline"
+                name="key-outline"
                 size={20}
                 color="#64748b"
                 style={styles.icon}
               />
               <TextInput
-                placeholder="Correo electrónico"
+                placeholder="Nueva contraseña"
                 placeholderTextColor="#94a3b8"
                 style={styles.input}
-                value={email}
-                onChangeText={setEmail}
-                autoCapitalize="none"
-                keyboardType="email-address"
-                onFocus={() => setFocusedField("email")}
+                value={newPassword}
+                onChangeText={setNewPassword}
+                secureTextEntry
+                onFocus={() => setFocusedField("new")}
                 onBlur={() => setFocusedField(null)}
               />
             </View>
 
+            {/* Confirmar Nueva Contraseña */}
             <View
               style={[
                 styles.inputWrapper,
-                styles.bioWrapper,
-                focusedField === "bio" && styles.inputFocused,
+                focusedField === "confirm" && styles.inputFocused,
               ]}
             >
               <Ionicons
-                name="document-text-outline"
+                name="checkmark-circle-outline"
                 size={20}
                 color="#64748b"
-                style={[styles.icon, { marginTop: 18 }]}
+                style={styles.icon}
               />
               <TextInput
-                placeholder="Biografía"
+                placeholder="Confirmar nueva contraseña"
                 placeholderTextColor="#94a3b8"
-                style={[
-                  styles.input,
-                  { textAlignVertical: "top", paddingTop: 18 },
-                ]}
-                value={bio}
-                onChangeText={setBio}
-                multiline
-                numberOfLines={4}
-                onFocus={() => setFocusedField("bio")}
+                style={styles.input}
+                value={confirmPassword}
+                onChangeText={setConfirmPassword}
+                secureTextEntry
+                onFocus={() => setFocusedField("confirm")}
                 onBlur={() => setFocusedField(null)}
               />
             </View>
 
             <TouchableOpacity
               style={[styles.button, updating && { opacity: 0.7 }]}
-              onPress={handleUpdate}
+              onPress={handleUpdatePassword}
               disabled={updating}
             >
               {updating ? (
                 <ActivityIndicator color="#fff" />
               ) : (
-                <Text style={styles.buttonText}>Guardar Cambios</Text>
+                <Text style={styles.buttonText}>Actualizar Contraseña</Text>
               )}
             </TouchableOpacity>
           </View>
@@ -254,7 +238,6 @@ export default function EditProfileScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#f8fafc" },
-  center: { flex: 1, justifyContent: "center", alignItems: "center" },
   cloud: { position: "absolute", opacity: 0.5 },
   scrollContent: {
     flexGrow: 1,
@@ -278,11 +261,10 @@ const styles = StyleSheet.create({
     borderColor: "transparent",
   },
   inputFocused: { borderColor: "#3b82f6", backgroundColor: "#fff" },
-  bioWrapper: { height: 120, alignItems: "flex-start" },
   icon: { marginRight: 12 },
   input: { flex: 1, color: "#1e293b", fontSize: 16 },
   button: {
-    backgroundColor: "#0f172a",
+    backgroundColor: "#0f172a", // Manteniendo el tono oscuro profesional
     height: 60,
     borderRadius: 16,
     justifyContent: "center",
