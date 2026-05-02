@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import {
   View,
   Text,
@@ -13,6 +13,7 @@ import {
   Modal,
   FlatList,
   Alert,
+  Animated,
 } from "react-native";
 import { Stack, useRouter, useFocusEffect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -23,19 +24,26 @@ import apiClient from "../src/api/client";
 import * as Location from "expo-location";
 import AppLoader from "../components/AppLoader";
 import { getWeatherTheme } from "../src/constants/themes";
+import { WeatherBackground } from "../src/constants/weatherbg";
+import LottieView from "lottie-react-native";
 
-const { width, height } = Dimensions.get("window");
-
+// This type matches the weather details rendered on the Home screen.
 interface WeatherData {
   city: string;
   temperature: number;
   feels_like: number;
   description: string;
   humidity: number;
+  visibility?: number;
+  sunrise?: number;
+  sunset?: number;
   pressure: number;
   wind_speed: number;
   icon: string;
+  city_name?: string;
+  forecast?: ForecastItem[];
 }
+
 interface CitySuggestion {
   id: number | string;
   name: string;
@@ -45,16 +53,29 @@ interface CitySuggestion {
   lon: number;
 }
 
+interface ForecastItem {
+  dt: number;
+  dt_txt: string;
+  temp: number;
+  description: string;
+  icon: string;
+}
+
 export default function HomeScreen(): React.ReactElement {
   const router = useRouter();
+  // currentWeather stores the weather shown in the main location card.
   const [currentWeather, setCurrentWeather] = useState<WeatherData | null>(
     null,
   );
   const [unit, setUnit] = useState<"metric" | "imperial">("metric");
+  // favorites stores the saved cities returned by the backend.
   const [favorites, setFavorites] = useState<WeatherData[]>([]);
+  // loading controls the first full screen load.
   const [loading, setLoading] = useState<boolean>(true);
+  // locating is true while the app reads the device position and weather.
   const [locating, setLocating] = useState<boolean>(true);
   const currentTheme = getWeatherTheme(currentWeather?.description);
+  // These states control the search modal and suggestion list.
   const [searchVisible, setSearchVisible] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [suggestions, setSuggestions] = useState<CitySuggestion[]>([]);
@@ -63,7 +84,74 @@ export default function HomeScreen(): React.ReactElement {
   const [selectedFavWeather, setSelectedFavWeather] =
     useState<WeatherData | null>(null);
   const [detailsModalVisible, setDetailsModalVisible] = useState(false);
+  const [isRealTime, setIsRealTime] = useState(false);
 
+  const loadCache = async () => {
+    try {
+      const cachedData = await AsyncStorage.getItem("last_weather_full");
+      if (cachedData !== null) {
+        setCurrentWeather(JSON.parse(cachedData));
+        setIsRealTime(false);
+      }
+    } catch (e) {
+      console.error("Error reading cache:", e);
+    }
+  };
+  const saveLastWeather = async (data: WeatherData) => {
+    try {
+      await AsyncStorage.setItem("last_weather_full", JSON.stringify(data));
+    } catch (e) {
+      console.error("Error saving cache:", e);
+    }
+  };
+
+  const fetchCurrentLocationWeather = async () => {
+    setLocating(true);
+    try {
+      // The GPS flow asks for permission, reads coordinates, and then calls the backend.
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") {
+        await loadCache();
+        return;
+      }
+
+      const servecesEnabled = await Location.hasServicesEnabledAsync();
+      if (!servecesEnabled) {
+        await loadCache();
+        return;
+      }
+
+      const location = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+      const { latitude, longitude } = location.coords;
+      if (!latitude || !longitude) {
+        throw new Error("Invalid coordinates");
+      }
+      const response = await apiClient.get("/weather/current-coord", {
+        params: { lat: latitude.toString(), lon: longitude.toString() },
+      });
+
+      setCurrentWeather(response.data);
+      await saveLastWeather(response.data);
+      setIsRealTime(true);
+    } catch (error) {
+      console.warn("Could not update current weather:", error);
+      await loadCache();
+    } finally {
+      setLocating(false);
+    }
+  };
+  useEffect(() => {
+    const prepareApp = async () => {
+      // 1. Cargamos el caché de inmediato para que haya algo en pantalla
+      await loadCache();
+      // 2. Intentamos actualizar con la ubicación real
+      await fetchCurrentLocationWeather();
+    };
+
+    prepareApp();
+  }, []);
   useEffect(() => {
     const initializeData = async () => {
       try {
@@ -72,12 +160,13 @@ export default function HomeScreen(): React.ReactElement {
           router.replace("/");
           return;
         }
+        // Home loads live weather and favorite cities at the same time.
         await Promise.all([
           fetchCurrentLocationWeather(),
           fetchFavorites(token),
         ]);
       } catch (error) {
-        console.warn("Error en el flujo de inicio:", error);
+        console.warn("Error in startup flow:", error);
       } finally {
         setLoading(false);
       }
@@ -85,6 +174,7 @@ export default function HomeScreen(): React.ReactElement {
 
     initializeData();
   }, []);
+
   useFocusEffect(
     useCallback(() => {
       const syncUnit = async () => {
@@ -94,7 +184,7 @@ export default function HomeScreen(): React.ReactElement {
             setUnit(savedUnit as "metric" | "imperial");
           }
         } catch (error) {
-          console.warn("Error sincronizando unidad:", error);
+          console.warn("Error synchronizing unit:", error);
         }
       };
 
@@ -103,44 +193,6 @@ export default function HomeScreen(): React.ReactElement {
       return () => {};
     }, []),
   );
-  const fetchCurrentLocationWeather = async () => {
-    setLocating(true);
-    try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== "granted") {
-        setCurrentWeather(null);
-        return;
-      }
-
-      const servecesEnabled = await Location.hasServicesEnabledAsync();
-      if (!servecesEnabled) {
-        setCurrentWeather(null);
-        return;
-      }
-
-      const location = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.Balanced,
-      });
-      const { latitude, longitude } = location.coords;
-      if (!latitude || !longitude) {
-        throw new Error("Coordenadas inválidas");
-      }
-      const response = await apiClient.get("/weather/current-coord", {
-        params: { lat: latitude.toString(), lon: longitude.toString() },
-      });
-
-      setCurrentWeather(response.data);
-      await AsyncStorage.setItem(
-        "last_weather_description",
-        response.data.description,
-      );
-    } catch (error) {
-      setCurrentWeather(null);
-      console.warn("No fue posible actualizar el clima actual:", error);
-    } finally {
-      setLocating(false);
-    }
-  };
   const formatTemperature = (celsius: number | undefined) => {
     if (celsius === undefined || celsius === null) return "--°";
 
@@ -169,7 +221,7 @@ export default function HomeScreen(): React.ReactElement {
         router.replace("/");
       }
       setFavorites([]);
-      console.warn("No fue posible cargar favoritos:", error);
+      console.warn("Could not load favorites:", error);
     }
   };
 
@@ -188,6 +240,7 @@ export default function HomeScreen(): React.ReactElement {
     if (text.length >= 2) {
       setSearching(true);
       try {
+        // The backend returns short city suggestions for the search modal.
         const response = await apiClient.get(`/weather/search-suggestions`, {
           params: { q: text },
         });
@@ -222,6 +275,7 @@ export default function HomeScreen(): React.ReactElement {
         headers: { Authorization: `Bearer ${token}` },
       });
 
+      // Actualizamos la lista local inmediatamente para mejorar la UX
       if (token) fetchFavorites(token);
 
       Alert.alert("Eliminado", `${cityName} ha sido quitada de tus favoritos.`);
@@ -285,70 +339,51 @@ export default function HomeScreen(): React.ReactElement {
     return <AppLoader />;
   }
 
-  const getDynamicAdvice = (weather: WeatherData | null) => {
-    if (!weather) {
-      return {
-        title: "Consejo del día",
-        desc: "Explora el mapa y agrega ciudades a tus favoritos.",
-        icon: "bulb",
-        color: "#f59e0b",
-        bg: "#fef3c7",
-      };
-    }
+  const ForecastCard = ({ item }: { item: ForecastItem }) => {
+    const date = new Date(item.dt * 1000);
 
-    const { temperature, description, wind_speed } = weather;
-    const descLower = description.toLowerCase();
-
-    if (
-      descLower.includes("lluvia") ||
-      descLower.includes("llovizna") ||
-      descLower.includes("tormenta")
-    ) {
-      return {
-        title: "Pronóstico de lluvia",
-        desc: "No olvides llevar tu paraguas hoy.",
-        icon: "umbrella",
-        color: "#6366f1",
-        bg: "#e0e7ff",
-      };
-    } else if (temperature >= 30) {
-      return {
-        title: "Temperatura alta",
-        desc: "Mantente hidratado y usa protector solar si sales.",
-        icon: "thermometer",
-        color: "#ef4444",
-        bg: "#fee2e2",
-      };
-    } else if (temperature <= 16) {
-      return {
-        title: "Clima frío",
-        desc: "Abrígate bien antes de salir de casa.",
-        icon: "snow",
-        color: "#0ea5e9",
-        bg: "#e0f2fe",
-      };
-    } else if (wind_speed >= 10) {
-      return {
-        title: "Vientos fuertes",
-        desc: "Precaución con ráfagas de viento en tu zona.",
-        icon: "leaf",
-        color: "#10b981",
-        bg: "#d1fae5",
-      };
-    } else {
-      return {
-        title: "Clima agradable",
-        desc: "Excelente día para realizar actividades al aire libre.",
-        icon: "sunny",
-        color: "#f59e0b",
-        bg: "#fef3c7",
-      };
-    }
+    const timeString = date.toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    });
+    return (
+      <View style={styles.forecastCard}>
+        <Text style={styles.forecastTime}>{timeString}</Text>
+        <Image
+          source={{
+            uri: `https://openweathermap.org/img/wn/${item.icon}@2x.png`,
+          }}
+          style={styles.forecastIcon}
+        />
+        <Text style={styles.forecastTemp}>{Math.round(item.temp)}°</Text>
+      </View>
+    );
   };
+  const getWeatherDetails = (weather: WeatherData | null) => {
+    if (!weather) return null;
 
-  const advice = getDynamicAdvice(currentWeather);
+    const { visibility, sunrise, sunset, humidity } = weather;
+
+    const formatTime = (timestamp: number) => {
+      return new Date(timestamp * 1000).toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+    };
+
+    return {
+      visibility: visibility ? (visibility / 1000).toFixed(1) : "N/A", // Km
+      sunrise: sunrise ? formatTime(sunrise) : "--:--",
+      sunset: sunset ? formatTime(sunset) : "--:--",
+      humidity: humidity || 0,
+    };
+  };
+  const details = getWeatherDetails(currentWeather);
+
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
+      {/* The top bar opens search on the left and the profile screen on the right. */}
       <View style={styles.topBar}>
         <TouchableOpacity onPress={() => setSearchVisible(true)}>
           <Ionicons name="search" size={26} color="#0ea5e9" />
@@ -361,9 +396,11 @@ export default function HomeScreen(): React.ReactElement {
         </TouchableOpacity>
       </View>
 
+      {/* This modal lets the user search cities and add one to favorites. */}
       <Modal visible={searchVisible} animationType="slide" transparent={true}>
         <View style={styles.modalOverlay}>
           <View style={styles.searchContainer}>
+            {/* HEADER DEL MODAL */}
             <View style={styles.searchHeader}>
               <View style={styles.searchInputWrapper}>
                 <Ionicons name="search" size={20} color="#3b82f6" />
@@ -392,6 +429,7 @@ export default function HomeScreen(): React.ReactElement {
               </TouchableOpacity>
             </View>
 
+            {/* CUERPO DE RESULTADOS */}
             <View style={styles.resultsBody}>
               {searching ? (
                 <View style={styles.loaderContainer}>
@@ -405,10 +443,10 @@ export default function HomeScreen(): React.ReactElement {
                   data={suggestions}
                   keyExtractor={(item, index) =>
                     item.id?.toString() || index.toString()
-                  }
+                  } // Supone que tu API devuelve objetos, no solo strings
                   renderItem={({ item }: { item: CitySuggestion }) => (
                     <TouchableOpacity
-                      style={styles.suggestionItemSearch}
+                      style={styles.suggestionItemSearch} // Usamos el estilo correcto con padding
                       onPress={() => selectCity(item)}
                     >
                       <View style={styles.suggestionIcon}>
@@ -451,6 +489,7 @@ export default function HomeScreen(): React.ReactElement {
                         <Text style={styles.historyTitle}>
                           RECIENTES RESULTADOS
                         </Text>
+                        {/* Aquí podrías mapear ciudades por defecto */}
                       </View>
                     )
                   }
@@ -465,8 +504,7 @@ export default function HomeScreen(): React.ReactElement {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
-        <Text style={styles.dateTime}>Clima en tiempo real</Text>
-
+        {/* The main card switches between loader, weather data, and retry state. */}
         {locating ? (
           <View style={[styles.mainCard, styles.loaderCard]}>
             <ActivityIndicator color="#0ea5e9" />
@@ -475,7 +513,27 @@ export default function HomeScreen(): React.ReactElement {
             </Text>
           </View>
         ) : currentWeather ? (
-          <LinearGradient colors={currentTheme.primary} style={styles.mainCard}>
+          <LinearGradient
+            colors={currentTheme.primary}
+            style={[styles.mainCard, { overflow: "hidden" }]}
+          >
+            <WeatherBackground themeName={currentTheme.name} />
+            {/* This section shows the main summary for the current location. */}
+            {!isRealTime && (
+              <View style={styles.cacheBadge}>
+                <Ionicons
+                  name="cloud-offline-outline"
+                  size={14}
+                  color="#f59e0b"
+                />
+                <Text
+                  style={styles.cacheText}
+                  onPress={fetchCurrentLocationWeather}
+                >
+                  Modo Offline - Toca aquí para actualizar
+                </Text>
+              </View>
+            )}
             <View style={styles.mainCardHeader}>
               <View>
                 <Text style={styles.cityText}>{currentWeather.city}</Text>
@@ -502,6 +560,7 @@ export default function HomeScreen(): React.ReactElement {
 
             <View style={styles.divider} />
 
+            {/* This row shows extra weather details returned by the backend. */}
             <View style={styles.detailsGrid}>
               <View style={styles.detailItem}>
                 <Ionicons name="water-outline" size={20} color="#fff" />
@@ -525,40 +584,78 @@ export default function HomeScreen(): React.ReactElement {
                 </Text>
               </View>
             </View>
+            <View style={styles.sectionContainer}>
+              <Text style={styles.sectionTitleForecast}>Próximamente</Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.forecastScroll}
+              >
+                {currentWeather?.forecast
+                  ? currentWeather.forecast
+                      /* 1. Filtramos: Solo mostramos bloques cuya hora sea mayor a la actual */
+                      .filter(
+                        (item: ForecastItem) => item.dt > Date.now() / 1000,
+                      )
+                      /* 2. Limitamos: Tomamos solo los primeros 6 resultados (las próximas 18 horas) */
+                      .slice(0, 6)
+                      /* 3. Renderizamos: Mapeamos los datos ya filtrados */
+                      .map((item: ForecastItem, index: number) => (
+                        <ForecastCard key={index} item={item} />
+                      ))
+                  : null}
+              </ScrollView>
+            </View>
           </LinearGradient>
         ) : (
           <TouchableOpacity
-            style={styles.alertCard}
+            style={[
+              styles.mainCard,
+              styles.loaderCard,
+              styles.errorCardExtension,
+            ]}
             onPress={fetchCurrentLocationWeather}
+            activeOpacity={0.8}
           >
-            <Ionicons name="location-outline" size={30} color="#f59e0b" />
-            <Text style={styles.alertTitle}>Ubicación no disponible</Text>
-            <Text style={styles.alertDesc}>Reintentar</Text>
+            <LottieView
+              source={require("../assets/animations/sad-cloud.json")}
+              autoPlay
+              loop
+              style={{ width: 80, height: 80 }}
+            />
+            <View style={styles.errorTextContainer}>
+              <Text style={styles.errorTitle}>Ubicación no disponible</Text>
+              <View style={styles.retryAction}>
+                <Ionicons name="refresh" size={16} color="#0ea5e9" />
+                <Text style={styles.retryTextInline}>Toca para reintentar</Text>
+              </View>
+            </View>
           </TouchableOpacity>
         )}
-
-        <TouchableOpacity
-          style={[styles.alertCard, { borderLeftColor: advice.color }]}
-        >
-          <View style={styles.alertLeft}>
-            <View style={[styles.alertIconBg, { backgroundColor: advice.bg }]}>
-              <Ionicons name={advice.icon} size={24} color={advice.color} />
-            </View>
-            <View style={styles.alertTextContainer}>
-              <Text style={styles.alertTitle}>{advice.title}</Text>
-              <Text style={styles.alertDesc} numberOfLines={2}>
-                {advice.desc}
-              </Text>
-            </View>
+        <View style={styles.detailsContainer}>
+          {/* Tarjeta de Amanecer/Atardecer */}
+          <View style={styles.detailCard}>
+            <Ionicons name="sunny-outline" size={24} color="#f59e0b" />
+            <Text style={styles.detailLabelTips}>Amanecer</Text>
+            <Text style={styles.detailValueTips}>{details?.sunrise}</Text>
           </View>
-          <Ionicons
-            name="sparkles"
-            size={20}
-            color={advice.color}
-            style={{ opacity: 0.4 }}
-          />
-        </TouchableOpacity>
 
+          {/* Tarjeta de Visibilidad */}
+          <View style={styles.detailCard}>
+            <Ionicons name="eye-outline" size={24} color="#0ea5e9" />
+            <Text style={styles.detailLabelTips}>Visibilidad</Text>
+            <Text style={styles.detailValueTips}>{details?.visibility} km</Text>
+          </View>
+
+          {/* Tarjeta de Atardecer */}
+          <View style={styles.detailCard}>
+            <Ionicons name="moon-outline" size={24} color="#6366f1" />
+            <Text style={styles.detailLabelTips}>Atardecer</Text>
+            <Text style={styles.detailValueTips}>{details?.sunset}</Text>
+          </View>
+        </View>
+
+        {/* Favorite cities are listed here, and each row can open a details modal. */}
         <View style={[styles.sectionCard, { marginBottom: 30 }]}>
           <Text style={[styles.sectionTitle, { marginBottom: 10 }]}>
             Tus Cuidades Favoritas
@@ -608,7 +705,8 @@ export default function HomeScreen(): React.ReactElement {
                         {
                           text: "Eliminar",
                           style: "destructive",
-                          onPress: () => removeFavorite(item.city),
+                          onPress: () =>
+                            removeFavorite(item.city_name || item.city),
                         },
                       ],
                     );
@@ -626,6 +724,7 @@ export default function HomeScreen(): React.ReactElement {
           )}
         </View>
       </ScrollView>
+      {/* This bottom modal shows the full details for one favorite city. */}
       <Modal
         animationType="slide"
         transparent={true}
@@ -638,8 +737,9 @@ export default function HomeScreen(): React.ReactElement {
               <>
                 <LinearGradient
                   colors={currentTheme.primary}
-                  style={styles.modalHeaderGradient}
+                  style={[styles.modalHeaderGradient, { overflow: "hidden" }]}
                 >
+                  <WeatherBackground themeName={currentTheme.name} />
                   <TouchableOpacity
                     style={styles.closeModalBtn}
                     onPress={() => setDetailsModalVisible(false)}
@@ -707,7 +807,10 @@ export default function HomeScreen(): React.ReactElement {
                             text: "Sí, eliminar",
                             style: "destructive",
                             onPress: () =>
-                              removeFavorite(selectedFavWeather!.city),
+                              removeFavorite(
+                                selectedFavWeather!.city_name ||
+                                  selectedFavWeather!.city,
+                              ),
                           },
                         ],
                       );
@@ -1214,5 +1317,120 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     fontSize: 16,
     marginLeft: 10,
+  },
+  sectionContainer: {
+    marginVertical: 20,
+    paddingHorizontal: 15,
+    alignItems: "center",
+  },
+  sectionTitleForecast: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#fff", // O el color de tu tema
+    marginBottom: 10,
+  },
+  forecastScroll: {
+    paddingLeft: 5,
+  },
+  forecastCard: {
+    backgroundColor: "rgba(255, 255, 255, 0.1)",
+    borderRadius: 15,
+    padding: 15,
+    marginRight: 12,
+    alignItems: "center",
+    width: 80,
+  },
+  forecastTime: {
+    color: "#eee",
+    fontSize: 12,
+  },
+  forecastIcon: {
+    width: 40,
+    height: 40,
+  },
+  forecastTemp: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "bold",
+  },
+  errorCardExtension: {
+    // Ajustamos la altura si la animación + texto necesitan más espacio,
+    // pero 200px es el estándar que ya definiste.
+    flexDirection: "column",
+    gap: 10,
+  },
+
+  errorTextContainer: {
+    alignItems: "center",
+  },
+
+  errorTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#334155", // Un gris oscuro profesional
+    marginBottom: 4,
+  },
+
+  retryAction: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+
+  retryTextInline: {
+    fontSize: 14,
+    color: "#0ea5e9", // Usamos el mismo azul del ActivityIndicator
+    fontWeight: "500",
+  },
+  cacheBadge: {
+    flexDirection: "row",
+    backgroundColor: "rgba(245, 158, 11, 0.15)", // Un naranja suave de advertencia
+    paddingVertical: 4,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    alignItems: "center",
+    gap: 6,
+    alignSelf: "center",
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: "rgba(245, 158, 11, 0.3)",
+  },
+
+  cacheText: {
+    color: "#ffffffde", // Color ámbar/naranja para indicar "atención"
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  detailsContainer: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingHorizontal: 15,
+    marginTop: 10,
+    marginBottom: 20,
+  },
+  detailCard: {
+    backgroundColor: "#fff",
+    width: "30%", // Tres columnas
+    borderRadius: 20,
+    padding: 15,
+    alignItems: "center",
+    elevation: 3,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  detailLabelTips: {
+    fontSize: 10,
+    color: "#64748b",
+    marginTop: 5,
+    textTransform: "uppercase",
+    fontWeight: "bold",
+  },
+  detailValueTips: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#1e293b",
+    marginTop: 2,
   },
 });

@@ -20,13 +20,13 @@ export default function Layout() {
       >
         {/* Each screen name matches a file inside the app folder. */}
         <Stack.Screen name="index" options={{ title: "Login" }} />
-        <Stack.Screen name="register" options={{ title: "Registro" }} />
-        <Stack.Screen name="home" options={{ title: "Inicio" }} />
-        <Stack.Screen name="profile" options={{ title: "Perfil" }} />
-        <Stack.Screen name="settings" options={{ title: "Configuración" }} />
-        <Stack.Screen name="edit-profile" options={{ title: "Editar Perfil" }} />
-        <Stack.Screen name="change-password" options={{ title: "Cambiar Contraseña" }} />
-        <Stack.Screen name="about" options={{ title: "Información" }} />
+        <Stack.Screen name="register" options={{ title: "Register" }} />
+        <Stack.Screen name="home" options={{ title: "Home" }} />
+        <Stack.Screen name="profile" options={{ title: "Profile" }} />
+        <Stack.Screen name="settings" options={{ title: "Settings" }} />
+        <Stack.Screen name="edit-profile" options={{ title: "Edit Profile" }} />
+        <Stack.Screen name="change-password" options={{ title: "Change Password" }} />
+        <Stack.Screen name="about" options={{ title: "About" }} />
       </Stack>
     </SafeAreaProvider>
   );

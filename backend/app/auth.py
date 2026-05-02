@@ -10,7 +10,7 @@ import os
 from app import database, models
 
 # These values define how JWT tokens are created and validated.
-SECRET_KEY = os.getenv("SECRET_KEY", "una_llave_muy_secreta_por_defecto")
+SECRET_KEY = os.getenv("SECRET_KEY", "a_very_secret_default_key")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24
 

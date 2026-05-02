@@ -1,4 +1,3 @@
-from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from .. import models, schemas, database, auth
@@ -93,20 +92,20 @@ def change_password(
     db: Session = Depends(database.get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
-    """Cambia la contraseña del usuario autenticado verificando la anterior."""
+    """Change password of authenticated user by verifying the old one."""
 
-    # 1. Verificar que la contraseña actual sea correcta
+    # 1. Verify that current password is correct
     if not auth.verify_password(pass_data.old_password, current_user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="La contraseña actual es incorrecta",
+            detail="Current password is incorrect",
         )
 
-    # 2. Hashear la nueva contraseña
+    # 2. Hash the new password
     new_hashed_password = auth.get_password_hash(pass_data.new_password)
 
-    # 3. Actualizar en la base de datos
+    # 3. Update in database
     current_user.hashed_password = new_hashed_password
     db.commit()
 
-    return {"message": "Contraseña actualizada exitosamente"}
+    return {"message": "Password updated successfully"}

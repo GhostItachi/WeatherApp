@@ -18,6 +18,7 @@ import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import AppLoader from "../components/AppLoader";
 
+// This shared client sends all frontend requests to the backend API.
 import apiClient from "../src/api/client";
 
 const { width, height } = Dimensions.get("window");
@@ -27,15 +28,18 @@ export default function LoginScreen(): React.ReactElement {
 
   const [isChecking, setIsChecking] = useState(true);
 
+  // These states store the login form values and the request state.
   const [email, setEmail] = useState<string>("");
   const [password, setPassword] = useState<string>("");
   const [loading, setLoading] = useState<boolean>(false);
 
+  // These animated values move the background clouds from right to left.
   const cloud1Anim = useRef(new Animated.Value(width)).current;
   const cloud2Anim = useRef(new Animated.Value(width + 150)).current;
 
   useEffect(() => {
     const checkSession = async () => {
+      // If a valid token already exists, the user is sent directly to Home.
       try {
         const token = await AsyncStorage.getItem("userToken");
         if (token) {
@@ -44,16 +48,17 @@ export default function LoginScreen(): React.ReactElement {
           });
           router.replace("/home");
         } else {
-          setIsChecking(false);
+          setIsChecking(false); // No hay token, mostramos el login
         }
       } catch (error) {
-        setIsChecking(false);
+        setIsChecking(false); // Error o token expirado, mostramos login
       }
     };
     checkSession();
   }, []);
 
   useEffect(() => {
+    // This helper creates an infinite cloud animation.
     const animateCloud = (
       animValue: Animated.Value,
       duration: number,
@@ -81,13 +86,15 @@ export default function LoginScreen(): React.ReactElement {
   }, [cloud1Anim, cloud2Anim, width]);
 
   const handleLogin = async () => {
+    // The screen blocks empty submissions before calling the backend.
     if (!email || !password) {
-      Alert.alert("Error", "Por favor completa todos los campos");
+      Alert.alert("Error", "Please complete all fields");
       return;
     }
 
     setLoading(true);
     try {
+      // FastAPI OAuth2 expects the credentials inside a FormData body.
       const formData = new FormData();
       formData.append("username", email);
       formData.append("password", password);
@@ -96,16 +103,17 @@ export default function LoginScreen(): React.ReactElement {
         headers: { "Content-Type": "multipart/form-data" },
       });
 
+      // The token is saved locally to keep the user logged in.
       const { access_token } = response.data;
 
       await AsyncStorage.setItem("userToken", access_token);
 
-      console.log("Login exitoso, token guardado");
+      console.log("Successful login, token saved");
       router.replace("/home");
     } catch (error: any) {
       const errorDetail =
-        error.response?.data?.detail || "No se pudo conectar con el servidor";
-      Alert.alert("Fallo en el inicio de sesión", errorDetail);
+        error.response?.data?.detail || "Could not connect to server";
+      Alert.alert("Login failed", errorDetail);
     } finally {
       setLoading(false);
     }
@@ -117,6 +125,7 @@ export default function LoginScreen(): React.ReactElement {
 
   return (
     <View style={styles.container}>
+      {/* Decorative clouds make the login screen feel lighter and more dynamic. */}
       <Animated.View
         style={[
           styles.cloud,
@@ -143,12 +152,14 @@ export default function LoginScreen(): React.ReactElement {
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
         >
+          {/* This header introduces the app before the form. */}
           <View style={styles.header}>
             <Ionicons name="sunny" size={80} color="#f59e0b" />
             <Text style={styles.title}>WeatherApp</Text>
-            <Text style={styles.subtitle}>Tu clima, en un solo lugar</Text>
+            <Text style={styles.subtitle}>Your weather, in one place</Text>
           </View>
 
+          {/* The form collects credentials and starts the login request. */}
           <View style={styles.form}>
             <View style={styles.inputWrapper}>
               <Ionicons
@@ -158,7 +169,7 @@ export default function LoginScreen(): React.ReactElement {
                 style={styles.icon}
               />
               <TextInput
-                placeholder="Correo electrónico"
+                placeholder="Email address"
                 placeholderTextColor="#94a3b8"
                 style={styles.input}
                 value={email}
@@ -176,7 +187,7 @@ export default function LoginScreen(): React.ReactElement {
                 style={styles.icon}
               />
               <TextInput
-                placeholder="Contraseña"
+                placeholder="Password"
                 placeholderTextColor="#94a3b8"
                 style={styles.input}
                 value={password}
@@ -191,10 +202,11 @@ export default function LoginScreen(): React.ReactElement {
               onPress={handleLogin}
               disabled={loading}
             >
+              {/* The button shows a spinner while the login request is running. */}
               {loading ? (
                 <ActivityIndicator color="#fff" />
               ) : (
-                <Text style={styles.buttonText}>Entrar</Text>
+                <Text style={styles.buttonText}>Sign In</Text>
               )}
             </TouchableOpacity>
 
@@ -204,7 +216,7 @@ export default function LoginScreen(): React.ReactElement {
             >
               <Text style={styles.linkText}>
                 ¿Nuevo aquí?{" "}
-                <Text style={styles.linkHighlight}>Crea una cuenta</Text>
+                <Text style={styles.linkHighlight}>Create an account</Text>
               </Text>
             </TouchableOpacity>
           </View>

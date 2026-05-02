@@ -23,12 +23,14 @@ const { width, height } = Dimensions.get("window");
 export default function ChangePasswordScreen() {
   const router = useRouter();
 
+  // Form states
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [updating, setUpdating] = useState(false);
   const [focusedField, setFocusedField] = useState<string | null>(null);
 
+  // Cloud animations (Reusing your EditProfile logic)
   const cloud1Anim = useRef(new Animated.Value(width)).current;
   const cloud2Anim = useRef(new Animated.Value(width + 150)).current;
 
@@ -61,14 +63,14 @@ export default function ChangePasswordScreen() {
 
   const handleUpdatePassword = async () => {
     if (!currentPassword || !newPassword || !confirmPassword) {
-      Alert.alert("Error", "Todos los campos son obligatorios");
+      Alert.alert("Error", "All fields are required");
       return;
     }
 
     if (newPassword !== confirmPassword) {
       Alert.alert(
         "Error",
-        "La nueva contraseña y la confirmación no coinciden",
+        "The new password and confirmation do not match",
       );
       return;
     }
@@ -76,7 +78,7 @@ export default function ChangePasswordScreen() {
     if (newPassword.length < 6) {
       Alert.alert(
         "Error",
-        "La nueva contraseña debe tener al menos 6 caracteres",
+        "The new password must be at least 6 characters long",
       );
       return;
     }
@@ -89,7 +91,7 @@ export default function ChangePasswordScreen() {
         { old_password: currentPassword, new_password: newPassword },
         { headers: { Authorization: `Bearer ${token}` } },
       );
-      Alert.alert("Éxito", "Contraseña actualizada correctamente");
+      Alert.alert("Success", "Password updated successfully");
       router.back();
     } catch (error: any) {
       const errorMsg =
@@ -104,6 +106,7 @@ export default function ChangePasswordScreen() {
     <View style={styles.container}>
       <Stack.Screen options={{ headerShown: false }} />
 
+      {/* Animated Clouds */}
       <Animated.View
         style={[
           styles.cloud,
@@ -130,14 +133,17 @@ export default function ChangePasswordScreen() {
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
         >
+          {/* Unified style header */}
           <View style={styles.header}>
-            <Text style={styles.title}>Seguridad</Text>
+            <Text style={styles.title}>Security</Text>
             <Text style={styles.subtitle}>
-              Actualiza tu contraseña de acceso
+              Update your access password
             </Text>
           </View>
 
+          {/* Form */}
           <View style={styles.form}>
+            {/* Current Password */}
             <View
               style={[
                 styles.inputWrapper,
@@ -151,7 +157,7 @@ export default function ChangePasswordScreen() {
                 style={styles.icon}
               />
               <TextInput
-                placeholder="Contraseña actual"
+                placeholder="Current Password"
                 placeholderTextColor="#94a3b8"
                 style={styles.input}
                 value={currentPassword}
@@ -162,6 +168,7 @@ export default function ChangePasswordScreen() {
               />
             </View>
 
+            {/* New Password */}
             <View
               style={[
                 styles.inputWrapper,
@@ -175,7 +182,7 @@ export default function ChangePasswordScreen() {
                 style={styles.icon}
               />
               <TextInput
-                placeholder="Nueva contraseña"
+                placeholder="New Password"
                 placeholderTextColor="#94a3b8"
                 style={styles.input}
                 value={newPassword}
@@ -186,6 +193,7 @@ export default function ChangePasswordScreen() {
               />
             </View>
 
+            {/* Confirm New Password */}
             <View
               style={[
                 styles.inputWrapper,
@@ -199,7 +207,7 @@ export default function ChangePasswordScreen() {
                 style={styles.icon}
               />
               <TextInput
-                placeholder="Confirmar nueva contraseña"
+                placeholder="Confirm new password"
                 placeholderTextColor="#94a3b8"
                 style={styles.input}
                 value={confirmPassword}
@@ -218,7 +226,7 @@ export default function ChangePasswordScreen() {
               {updating ? (
                 <ActivityIndicator color="#fff" />
               ) : (
-                <Text style={styles.buttonText}>Actualizar Contraseña</Text>
+                <Text style={styles.buttonText}>Update Password</Text>
               )}
             </TouchableOpacity>
           </View>
@@ -256,7 +264,7 @@ const styles = StyleSheet.create({
   icon: { marginRight: 12 },
   input: { flex: 1, color: "#1e293b", fontSize: 16 },
   button: {
-    backgroundColor: "#0f172a",
+    backgroundColor: "#0f172a", // Manteniendo el tono oscuro profesional
     height: 60,
     borderRadius: 16,
     justifyContent: "center",

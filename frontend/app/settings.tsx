@@ -165,7 +165,7 @@ export default function SettingsScreen() {
         </View>
 
         <View style={styles.footerInfo}>
-          <Text style={styles.footerVersion}>Build Version: 1.0.2-2026</Text>
+          <Text style={styles.footerVersion}>Build Version: 2.0.1-2026</Text>
           <Text style={styles.footerEnvironment}>
             Entorno: Production (v1.0)
           </Text>

@@ -1,14 +1,18 @@
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
-from app import database, models, schemas, auth
 import httpx
 import os
 import logging
+import asyncio
+from fastapi import APIRouter, Depends, HTTPException, status, Query
+from typing import List
+from sqlalchemy.orm import Session
+from app import database, models, schemas, auth
+from ..schemas import WeatherResponse, ForecastItem
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/weather", tags=["Weather"])
 
-BASE_URL = "https://api.openweathermap.org/data/2.5/weather"
+CURRENT_URL = "https://api.openweathermap.org/data/2.5/weather"
+FORECAST_URL = "https://api.openweathermap.org/data/2.5/forecast"
 GEO_URL = "https://api.openweathermap.org/geo/1.0/direct"
 
 
@@ -19,73 +23,85 @@ def get_api_key() -> str:
     return api_key
 
 
-def parse_weather_response(data: dict) -> dict:
+def parse_forecast_item(item: dict) -> dict:
+    return {
+        "dt": item.get("dt"),
+        "dt_txt": item.get("dt_txt"),
+        "temp": item.get("main", {}).get("temp", 0),
+        "description": item.get("weather", [{}])[0].get("description", "").capitalize(),
+        "icon": item.get("weather", [{}])[0].get("icon", ""),
+    }
+
+
+def parse_full_weather(current_data: dict, forecast_data: dict) -> dict:
     try:
-        main = data.get("main", {})
-        weather_data = data.get("weather", [{}])[0]
-        wind = data.get("wind", {})
-        description = weather_data.get("description", "sin descripción").capitalize()
+        main = current_data.get("main", {})
+        weather_data = current_data.get("weather", [{}])[0]
+        wind = current_data.get("wind", {})
+        forecast_list = [
+            parse_forecast_item(i) for i in forecast_data.get("list", [])[:15]
+        ]
 
         return {
-            "city": data.get("name", "Unknown"),
+            "city": current_data.get("name", "Unknown"),
             "temperature": main.get("temp", 0),
             "feels_like": main.get("feels_like", 0),
-            "description": description,
+            "description": weather_data.get(
+                "description", "sin descripción"
+            ).capitalize(),
             "humidity": main.get("humidity", 0),
             "pressure": main.get("pressure", 0),
             "wind_speed": wind.get("speed", 0),
             "icon": weather_data.get("icon", ""),
+            "forecast": forecast_list,
+            "visibility": current_data.get("visibility", 0),
+            "sunrise": current_data.get("sys", {}).get("sunrise"),
+            "sunset": current_data.get("sys", {}).get("sunset"),
         }
     except Exception as e:
         logger.error(f"Error parsing weather: {e}")
         raise HTTPException(
-            status_code=502, detail="Error al procesar datos del proveedor"
+            status_code=502, detail="Error processing provider data"
         )
 
 
 def handle_provider_error(response_status: int, city_name: str = "Unknown"):
+    # 1. Resource Error (City not found)
     if response_status == 404:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Ciudad '{city_name}' no encontrada en el servicio meteorológico",
+            detail=f"City '{city_name}' not found in weather service",
         )
 
+    # 2. Authentication Error (Invalid or expired API Key)
     elif response_status == 401:
-        logger.critical("OpenWeather API Key inválida o expirada.")
+        logger.critical("Invalid or expired OpenWeather API Key.")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Error de configuración en el servidor de clima",
+            detail="Weather service configuration error",
         )
 
+    # 3. Rate Limit (Subscription limit exceeded)
     elif response_status == 429:
-        logger.warning("Se ha alcanzado el límite de peticiones a OpenWeather.")
+        logger.warning("OpenWeather request limit reached.")
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail="Demasiadas peticiones al servicio de clima. Intenta más tarde.",
+            detail="Too many requests to weather service. Try again later.",
         )
 
+    # 4. Provider Server Errors (5xx)
     elif 500 <= response_status < 600:
-        logger.error(f"OpenWeather está fuera de servicio: Status {response_status}")
+        logger.error(f"OpenWeather is unavailable: Status {response_status}")
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="El proveedor de clima no está disponible temporalmente",
+            detail="Weather provider temporarily unavailable",
         )
 
+    # 5. Generic failure (fallback with appropriate code)
     raise HTTPException(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         detail="Error inesperado al consultar el servicio de clima",
     )
-
-
-@router.get("/current/{city}", response_model=schemas.WeatherResponse)
-async def get_weather(city: str):
-    api_key = get_api_key()
-    async with httpx.AsyncClient(timeout=10.0) as client:
-        params = {"q": city.strip(), "appid": api_key, "units": "metric", "lang": "es"}
-        response = await client.get(BASE_URL, params=params)
-        if response.status_code != 200:
-            handle_provider_error(response.status_code, city)
-        return parse_weather_response(response.json())
 
 
 @router.get("/search-suggestions")
@@ -100,7 +116,7 @@ async def get_search_suggestions(q: str):
             "q": query,
             "limit": 10,
             "appid": api_key,
-        }
+        }  # Pedimos unos pocos más para filtrar
         response = await client.get(GEO_URL, params=params)
 
         if response.status_code != 200:
@@ -108,7 +124,8 @@ async def get_search_suggestions(q: str):
 
         data = response.json()
         suggestions = []
-        seen_ids = set()
+        seen_ids = set()  # Structure to track already added IDs
+
         for loc in data:
             name = loc.get("name")
             country = loc.get("country")
@@ -117,6 +134,7 @@ async def get_search_suggestions(q: str):
 
             unique_id = f"{name}-{country}-{lat}-{lon}"
 
+            # We ONLY add if the ID hasn't been seen in this response
             if unique_id not in seen_ids:
                 suggestions.append(
                     {
@@ -130,7 +148,43 @@ async def get_search_suggestions(q: str):
                 )
                 seen_ids.add(unique_id)
 
-        return suggestions[:5]
+        return suggestions[:5]  # Return only the 5 final filtered results
+
+
+@router.get("/current/{city}", response_model=schemas.WeatherResponse)
+async def get_weather(city: str):
+    api_key = get_api_key()
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        params = {"q": city.strip(), "appid": api_key, "units": "metric", "lang": "es"}
+        tasks = [
+            client.get(CURRENT_URL, params=params),
+            client.get(FORECAST_URL, params=params),
+        ]
+        current_res, forecast_res = await asyncio.gather(*tasks)
+        if current_res.status_code != 200:
+            handle_provider_error(current_res.status_code, city)
+        return parse_full_weather(current_res.json(), forecast_res.json())
+
+
+@router.get("/current-coord", response_model=schemas.WeatherResponse)
+async def get_weather_by_coords(lat: float = Query(...), lon: float = Query(...)):
+    api_key = get_api_key()
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        params = {
+            "lat": lat,
+            "lon": lon,
+            "appid": api_key,
+            "units": "metric",
+            "lang": "es",
+        }
+        tasks = [
+            client.get(CURRENT_URL, params=params),
+            client.get(FORECAST_URL, params=params),
+        ]
+        current_res, forecast_res = await asyncio.gather(*tasks)
+        if current_res.status_code != 200:
+            handle_provider_error(current_res.status_code)
+        return parse_full_weather(current_res.json(), forecast_res.json())
 
 
 @router.post("/favorites", response_model=schemas.FavoriteCityOut)
@@ -142,8 +196,9 @@ async def add_favorite(
     city_name_clean = favorite.city_name.strip()
     api_key = get_api_key()
 
+    # 1. VALIDACIÓN GEOGRÁFICA: ¿Existe esta ciudad para el proveedor?
     async with httpx.AsyncClient(timeout=5.0) as client:
-
+        # Usamos el Geo API para normalizar el nombre
         geo_params = {"q": city_name_clean, "limit": 1, "appid": api_key}
         geo_resp = await client.get(GEO_URL, params=geo_params)
 
@@ -154,8 +209,10 @@ async def add_favorite(
             )
 
         geo_data = geo_resp.json()[0]
+        # Creamos un nombre estandarizado: "Ciudad, País"
         normalized_name = f"{geo_data['name']}, {geo_data['country']}"
 
+    # 2. VALIDACIÓN DE DUPLICADOS: ¿Ya la tiene este usuario?
     existing = (
         db.query(models.FavoriteCity)
         .filter(
@@ -171,6 +228,7 @@ async def add_favorite(
             detail=f"'{normalized_name}' ya está en tu lista de favoritos",
         )
 
+    # 3. PERSISTENCIA: Ahora sí, guardamos datos limpios
     new_favorite = models.FavoriteCity(
         city_name=normalized_name,
         user_id=current_user.id,
@@ -181,7 +239,7 @@ async def add_favorite(
     return new_favorite
 
 
-@router.get("/favorites/my", response_model=list[schemas.WeatherResponse])
+@router.get("/favorites/my", response_model=list[schemas.FavoriteWeatherResponse])
 async def get_my_favorites(
     db: Session = Depends(database.get_db),
     current_user: models.User = Depends(auth.get_current_user),
@@ -203,12 +261,15 @@ async def get_my_favorites(
                     "units": "metric",
                     "lang": "es",
                 }
-                response = await client.get(BASE_URL, params=params)
+                response = await client.get(CURRENT_URL, params=params)
                 if response.status_code == 200:
-                    results.append(parse_weather_response(response.json()))
+                    weather_data = parse_full_weather(response.json(), {})
+                    # Agregamos el city_name normalizado para la eliminación
+                    weather_data["city_name"] = fav.city_name
+                    results.append(weather_data)
             except Exception as e:
                 logger.error(f"Error fetching favorite {fav.city_name}: {e}")
-                continue
+                continue  # Si una falla, seguimos con las demás
     return results
 
 
@@ -235,23 +296,3 @@ def delete_favorite(
     db.delete(fav)
     db.commit()
     return None
-
-
-from fastapi import Query
-
-
-@router.get("/current-coord", response_model=schemas.WeatherResponse)
-async def get_weather_by_coords(lat: float = Query(...), lon: float = Query(...)):
-    api_key = get_api_key()
-    async with httpx.AsyncClient(timeout=10.0) as client:
-        params = {
-            "lat": lat,
-            "lon": lon,
-            "appid": api_key,
-            "units": "metric",
-            "lang": "es",
-        }
-        response = await client.get(BASE_URL, params=params)
-        if response.status_code != 200:
-            handle_provider_error(response.status_code)
-        return parse_weather_response(response.json())

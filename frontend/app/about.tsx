@@ -16,6 +16,7 @@ const { width, height } = Dimensions.get("window");
 export default function AboutScreen() {
   const router = useRouter();
 
+  // Reusing cloud animations for total consistency
   const cloud1Anim = useRef(new Animated.Value(width)).current;
   const cloud2Anim = useRef(new Animated.Value(width + 150)).current;
 
@@ -50,6 +51,7 @@ export default function AboutScreen() {
     <View style={styles.container}>
       <Stack.Screen options={{ headerShown: false }} />
 
+      {/* Animated Background Clouds */}
       <Animated.View
         style={[
           styles.cloud,
@@ -69,34 +71,35 @@ export default function AboutScreen() {
       </Animated.View>
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
+        {/* Unified header with Edit Profile */}
         <View style={styles.header}>
-          <Text style={styles.title}>Acerca de</Text>
-          <Text style={styles.subtitle}>Información del sistema</Text>
+          <Text style={styles.title}>About</Text>
+          <Text style={styles.subtitle}>System Information</Text>
         </View>
 
+        {/* Informative content with "Form" style (simulated inputs or cards) */}
         <View style={styles.infoSection}>
           <View style={styles.infoWrapper}>
-            <Text style={styles.label}>Nombre del Proyecto</Text>
+            <Text style={styles.label}>Project Name</Text>
             <Text style={styles.value}>WeatherApp</Text>
           </View>
 
           <View style={styles.infoWrapper}>
-            <Text style={styles.label}>Versión</Text>
-            <Text style={styles.value}>1.0.2 - Stable Build</Text>
+            <Text style={styles.label}>Version</Text>
+            <Text style={styles.value}>2.0.1 - Stable Build</Text>
           </View>
 
           <View style={[styles.infoWrapper, styles.bioWrapper]}>
-            <Text style={styles.label}>Descripción Técnica</Text>
+            <Text style={styles.label}>Technical Description</Text>
             <Text style={styles.description}>
-              Desarrollado como un sistema distribuido que integra una API
-              RESTful en FastAPI con una interfaz móvil en React Native.
-              Enfocado en la optimización de hardware y persistencia de datos
-              eficiente.
+              Developed as a distributed system that integrates a RESTful API
+              in FastAPI with a mobile interface in React Native.
+              Focused on hardware optimization and efficient data persistence.
             </Text>
           </View>
 
           <View style={styles.infoWrapper}>
-            <Text style={styles.label}>Desarrollador</Text>
+            <Text style={styles.label}>Developer</Text>
             <View style={styles.devRow}>
               <Ionicons
                 name="code-slash"
@@ -110,7 +113,7 @@ export default function AboutScreen() {
         </View>
 
         <Text style={styles.footerText}>
-          © 2026 • Facultad de Ingeniería de Sistemas
+          © 2026 • Faculty of Systems Engineering
         </Text>
       </ScrollView>
     </View>
