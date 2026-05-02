@@ -55,16 +55,31 @@ class PasswordChange(BaseModel):
     new_password: str
 
 
+class ForecastItem(BaseModel):
+    dt: int
+    dt_txt: str
+    temp: float
+    description: str
+    icon: str
+
+
 # This schema defines the weather payload returned to the frontend.
 class WeatherResponse(BaseModel):
     city: str
     temperature: float
     feels_like: float
-    description: str
     humidity: int
+    visibility: int
+    sunrise: Optional[int] = None
+    sunset: Optional[int] = None
     pressure: int
-    wind_speed: float
+    description: str
     icon: str
+    wind_speed: float
+    forecast: List[ForecastItem] = []
+
+    class Config:
+        from_attributes = True
 
 
 # This schema includes the normalized city name for favorites deletion

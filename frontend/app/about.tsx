@@ -16,7 +16,6 @@ const { width, height } = Dimensions.get("window");
 export default function AboutScreen() {
   const router = useRouter();
 
-  // Reutilizando las animaciones de nubes para consistencia total
   const cloud1Anim = useRef(new Animated.Value(width)).current;
   const cloud2Anim = useRef(new Animated.Value(width + 150)).current;
 
@@ -51,7 +50,6 @@ export default function AboutScreen() {
     <View style={styles.container}>
       <Stack.Screen options={{ headerShown: false }} />
 
-      {/* Nubes Animadas de fondo */}
       <Animated.View
         style={[
           styles.cloud,
@@ -71,13 +69,11 @@ export default function AboutScreen() {
       </Animated.View>
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* Header unificado con Edit Profile */}
         <View style={styles.header}>
           <Text style={styles.title}>Acerca de</Text>
           <Text style={styles.subtitle}>Información del sistema</Text>
         </View>
 
-        {/* Contenido Informativo con estilo de "Formulario" (inputs simulados o tarjetas) */}
         <View style={styles.infoSection}>
           <View style={styles.infoWrapper}>
             <Text style={styles.label}>Nombre del Proyecto</Text>

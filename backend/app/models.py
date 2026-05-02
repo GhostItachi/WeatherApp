@@ -12,7 +12,6 @@ class User(Base):
     hashed_password: Mapped[str] = mapped_column(nullable=False)
     bio = Column(String, nullable=True)
 
-    # Agregamos cascade="all, delete" para que SQLAlchemy limpie los favoritos al borrar el usuario
     favorites = relationship(
         "FavoriteCity", back_populates="owner", cascade="all, delete"
     )

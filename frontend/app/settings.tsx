@@ -9,7 +9,7 @@ import {
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Stack, useRouter } from "expo-router";
+import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import apiClient from "../src/api/client";
 
@@ -17,7 +17,6 @@ export default function SettingsScreen() {
   const router = useRouter();
 
   const handleAction = (title: string) => {
-    // Most settings are placeholders for future work, so this shows a simple message.
     Alert.alert(
       "Función en desarrollo",
       `La opción ${title} estará disponible próximamente.`,
@@ -26,7 +25,6 @@ export default function SettingsScreen() {
 
   const handleClearCache = async () => {
     try {
-      // Definimos qué claves queremos purgar
       const keysToRemove = [
         "user_data_cache",
         "location_weather_cache",
@@ -58,15 +56,12 @@ export default function SettingsScreen() {
             try {
               const token = await AsyncStorage.getItem("userToken");
 
-              // 1. Petición al endpoint DELETE /users/me que ya tienes en el backend
               await apiClient.delete("/users/me", {
                 headers: { Authorization: `Bearer ${token}` },
               });
 
-              // 2. Limpieza total de persistencia local
               await AsyncStorage.clear();
 
-              // 3. Redirección al Login
               router.replace("/");
             } catch (error) {
               console.error(error);
@@ -88,7 +83,6 @@ export default function SettingsScreen() {
         text: "Cerrar Sesión",
         onPress: async () => {
           await AsyncStorage.removeItem("userToken");
-          // Opcional: limpiar caché de usuario pero dejar preferencias de la app
           await AsyncStorage.removeItem("user_data_cache");
           router.replace("/");
         },
@@ -108,11 +102,9 @@ export default function SettingsScreen() {
 
         <Text style={styles.headerTitle}>Configuración</Text>
 
-        {/* This empty view keeps the title centered in the header row. */}
         <View style={styles.headerPlaceholder} />
       </View>
       <ScrollView>
-        {/* Security actions group account protection options. */}
         <Text style={styles.sectionTitle}>Seguridad y Acceso</Text>
         <View style={styles.menuCard}>
           <SettingItem
@@ -127,7 +119,6 @@ export default function SettingsScreen() {
           />
         </View>
 
-        {/* Privacy actions group device and local app data options. */}
         <Text style={styles.sectionTitle}>Privacidad y Datos</Text>
         <View style={styles.menuCard}>
           <SettingItem
@@ -142,7 +133,6 @@ export default function SettingsScreen() {
           />
         </View>
 
-        {/* Legal actions group informational pages about the app. */}
         <Text style={styles.sectionTitle}>Información Legal</Text>
         <View style={styles.menuCard}>
           <SettingItem
@@ -157,7 +147,6 @@ export default function SettingsScreen() {
           />
         </View>
 
-        {/* This section isolates destructive account actions. */}
         <Text style={[styles.sectionTitle, { color: "#f43f5e" }]}>
           Acciones de Cuenta
         </Text>
@@ -186,7 +175,6 @@ export default function SettingsScreen() {
   );
 }
 
-// This small helper keeps the settings rows consistent.
 const SettingItem = ({
   icon,
   label,

@@ -4,9 +4,6 @@ import LottieView from "lottie-react-native";
 
 const { width } = Dimensions.get("window");
 
-// This local animation is used as the shared loading screen.
-const weatherAnimation = require("../assets/animations/weather-load.json");
-
 export default function AppLoader() {
   const animation = useRef<LottieView>(null);
   useEffect(() => {

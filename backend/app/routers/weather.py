@@ -20,13 +20,10 @@ def get_api_key() -> str:
 
 
 def parse_weather_response(data: dict) -> dict:
-    """Extrae la descripción detallada y formatea los datos para la App."""
     try:
         main = data.get("main", {})
         weather_data = data.get("weather", [{}])[0]
         wind = data.get("wind", {})
-
-        # 'description' ofrece el detalle (ej. nubes nubladas) vs 'main' (ej. Clouds)
         description = weather_data.get("description", "sin descripción").capitalize()
 
         return {
@@ -47,14 +44,12 @@ def parse_weather_response(data: dict) -> dict:
 
 
 def handle_provider_error(response_status: int, city_name: str = "Unknown"):
-    # 1. Error de Recurso (La ciudad no existe)
     if response_status == 404:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Ciudad '{city_name}' no encontrada en el servicio meteorológico",
         )
 
-    # 2. Error de Autenticación (API Key inválida o expirada)
     elif response_status == 401:
         logger.critical("OpenWeather API Key inválida o expirada.")
         raise HTTPException(
@@ -62,7 +57,6 @@ def handle_provider_error(response_status: int, city_name: str = "Unknown"):
             detail="Error de configuración en el servidor de clima",
         )
 
-    # 3. Rate Limit (Límite de suscripción excedido)
     elif response_status == 429:
         logger.warning("Se ha alcanzado el límite de peticiones a OpenWeather.")
         raise HTTPException(
@@ -70,7 +64,6 @@ def handle_provider_error(response_status: int, city_name: str = "Unknown"):
             detail="Demasiadas peticiones al servicio de clima. Intenta más tarde.",
         )
 
-    # 4. Errores del Servidor del Proveedor (5xx)
     elif 500 <= response_status < 600:
         logger.error(f"OpenWeather está fuera de servicio: Status {response_status}")
         raise HTTPException(
@@ -78,7 +71,6 @@ def handle_provider_error(response_status: int, city_name: str = "Unknown"):
             detail="El proveedor de clima no está disponible temporalmente",
         )
 
-    # 5. Fallo genérico (Mantenemos un respaldo, pero con un código más apropiado)
     raise HTTPException(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         detail="Error inesperado al consultar el servicio de clima",
@@ -108,7 +100,7 @@ async def get_search_suggestions(q: str):
             "q": query,
             "limit": 10,
             "appid": api_key,
-        }  # Pedimos unos pocos más para filtrar
+        }
         response = await client.get(GEO_URL, params=params)
 
         if response.status_code != 200:
@@ -116,8 +108,7 @@ async def get_search_suggestions(q: str):
 
         data = response.json()
         suggestions = []
-        seen_ids = set()  # Estructura para rastrear IDs ya agregados
-
+        seen_ids = set()
         for loc in data:
             name = loc.get("name")
             country = loc.get("country")
@@ -126,7 +117,6 @@ async def get_search_suggestions(q: str):
 
             unique_id = f"{name}-{country}-{lat}-{lon}"
 
-            # SOLO agregamos si el ID no ha sido visto en esta respuesta
             if unique_id not in seen_ids:
                 suggestions.append(
                     {
@@ -140,7 +130,7 @@ async def get_search_suggestions(q: str):
                 )
                 seen_ids.add(unique_id)
 
-        return suggestions[:5]  # Retornamos solo los 5 finales ya filtrados
+        return suggestions[:5]
 
 
 @router.post("/favorites", response_model=schemas.FavoriteCityOut)
@@ -152,9 +142,8 @@ async def add_favorite(
     city_name_clean = favorite.city_name.strip()
     api_key = get_api_key()
 
-    # 1. VALIDACIÓN GEOGRÁFICA: ¿Existe esta ciudad para el proveedor?
     async with httpx.AsyncClient(timeout=5.0) as client:
-        # Usamos el Geo API para normalizar el nombre
+
         geo_params = {"q": city_name_clean, "limit": 1, "appid": api_key}
         geo_resp = await client.get(GEO_URL, params=geo_params)
 
@@ -165,10 +154,8 @@ async def add_favorite(
             )
 
         geo_data = geo_resp.json()[0]
-        # Creamos un nombre estandarizado: "Ciudad, País"
         normalized_name = f"{geo_data['name']}, {geo_data['country']}"
 
-    # 2. VALIDACIÓN DE DUPLICADOS: ¿Ya la tiene este usuario?
     existing = (
         db.query(models.FavoriteCity)
         .filter(
@@ -184,7 +171,6 @@ async def add_favorite(
             detail=f"'{normalized_name}' ya está en tu lista de favoritos",
         )
 
-    # 3. PERSISTENCIA: Ahora sí, guardamos datos limpios
     new_favorite = models.FavoriteCity(
         city_name=normalized_name,
         user_id=current_user.id,
@@ -195,7 +181,7 @@ async def add_favorite(
     return new_favorite
 
 
-@router.get("/favorites/my", response_model=list[schemas.FavoriteWeatherResponse])
+@router.get("/favorites/my", response_model=list[schemas.WeatherResponse])
 async def get_my_favorites(
     db: Session = Depends(database.get_db),
     current_user: models.User = Depends(auth.get_current_user),
@@ -219,13 +205,10 @@ async def get_my_favorites(
                 }
                 response = await client.get(BASE_URL, params=params)
                 if response.status_code == 200:
-                    weather_data = parse_weather_response(response.json())
-                    # Agregamos el city_name normalizado para la eliminación
-                    weather_data["city_name"] = fav.city_name
-                    results.append(weather_data)
+                    results.append(parse_weather_response(response.json()))
             except Exception as e:
                 logger.error(f"Error fetching favorite {fav.city_name}: {e}")
-                continue  # Si una falla, seguimos con las demás
+                continue
     return results
 
 
@@ -254,7 +237,7 @@ def delete_favorite(
     return None
 
 
-from fastapi import Query 
+from fastapi import Query
 
 
 @router.get("/current-coord", response_model=schemas.WeatherResponse)

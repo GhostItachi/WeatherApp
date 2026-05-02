@@ -26,7 +26,6 @@ import { getWeatherTheme } from "../src/constants/themes";
 
 const { width, height } = Dimensions.get("window");
 
-// This type matches the weather details rendered on the Home screen.
 interface WeatherData {
   city: string;
   temperature: number;
@@ -36,33 +35,26 @@ interface WeatherData {
   pressure: number;
   wind_speed: number;
   icon: string;
-  city_name?: string; // Normalized city name for deletion (e.g., "Madrid, ES")
 }
-// 1. Define la estructura de la ciudad
 interface CitySuggestion {
   id: number | string;
   name: string;
   country: string;
-  state?: string; // El ? significa que puede ser nulo o no venir
+  state?: string;
   lat: number;
   lon: number;
 }
 
 export default function HomeScreen(): React.ReactElement {
   const router = useRouter();
-  // currentWeather stores the weather shown in the main location card.
   const [currentWeather, setCurrentWeather] = useState<WeatherData | null>(
     null,
   );
   const [unit, setUnit] = useState<"metric" | "imperial">("metric");
-  // favorites stores the saved cities returned by the backend.
   const [favorites, setFavorites] = useState<WeatherData[]>([]);
-  // loading controls the first full screen load.
   const [loading, setLoading] = useState<boolean>(true);
-  // locating is true while the app reads the device position and weather.
   const [locating, setLocating] = useState<boolean>(true);
   const currentTheme = getWeatherTheme(currentWeather?.description);
-  // These states control the search modal and suggestion list.
   const [searchVisible, setSearchVisible] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [suggestions, setSuggestions] = useState<CitySuggestion[]>([]);
@@ -80,7 +72,6 @@ export default function HomeScreen(): React.ReactElement {
           router.replace("/");
           return;
         }
-        // Home loads live weather and favorite cities at the same time.
         await Promise.all([
           fetchCurrentLocationWeather(),
           fetchFavorites(token),
@@ -115,7 +106,6 @@ export default function HomeScreen(): React.ReactElement {
   const fetchCurrentLocationWeather = async () => {
     setLocating(true);
     try {
-      // The GPS flow asks for permission, reads coordinates, and then calls the backend.
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== "granted") {
         setCurrentWeather(null);
@@ -198,7 +188,6 @@ export default function HomeScreen(): React.ReactElement {
     if (text.length >= 2) {
       setSearching(true);
       try {
-        // The backend returns short city suggestions for the search modal.
         const response = await apiClient.get(`/weather/search-suggestions`, {
           params: { q: text },
         });
@@ -233,7 +222,6 @@ export default function HomeScreen(): React.ReactElement {
         headers: { Authorization: `Bearer ${token}` },
       });
 
-      // Actualizamos la lista local inmediatamente para mejorar la UX
       if (token) fetchFavorites(token);
 
       Alert.alert("Eliminado", `${cityName} ha sido quitada de tus favoritos.`);
@@ -297,7 +285,6 @@ export default function HomeScreen(): React.ReactElement {
     return <AppLoader />;
   }
 
-  // This helper builds the advice card from the current weather conditions.
   const getDynamicAdvice = (weather: WeatherData | null) => {
     if (!weather) {
       return {
@@ -362,7 +349,6 @@ export default function HomeScreen(): React.ReactElement {
   const advice = getDynamicAdvice(currentWeather);
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
-      {/* The top bar opens search on the left and the profile screen on the right. */}
       <View style={styles.topBar}>
         <TouchableOpacity onPress={() => setSearchVisible(true)}>
           <Ionicons name="search" size={26} color="#0ea5e9" />
@@ -375,11 +361,9 @@ export default function HomeScreen(): React.ReactElement {
         </TouchableOpacity>
       </View>
 
-      {/* This modal lets the user search cities and add one to favorites. */}
       <Modal visible={searchVisible} animationType="slide" transparent={true}>
         <View style={styles.modalOverlay}>
           <View style={styles.searchContainer}>
-            {/* HEADER DEL MODAL */}
             <View style={styles.searchHeader}>
               <View style={styles.searchInputWrapper}>
                 <Ionicons name="search" size={20} color="#3b82f6" />
@@ -408,7 +392,6 @@ export default function HomeScreen(): React.ReactElement {
               </TouchableOpacity>
             </View>
 
-            {/* CUERPO DE RESULTADOS */}
             <View style={styles.resultsBody}>
               {searching ? (
                 <View style={styles.loaderContainer}>
@@ -422,10 +405,10 @@ export default function HomeScreen(): React.ReactElement {
                   data={suggestions}
                   keyExtractor={(item, index) =>
                     item.id?.toString() || index.toString()
-                  } // Supone que tu API devuelve objetos, no solo strings
+                  }
                   renderItem={({ item }: { item: CitySuggestion }) => (
                     <TouchableOpacity
-                      style={styles.suggestionItemSearch} // Usamos el estilo correcto con padding
+                      style={styles.suggestionItemSearch}
                       onPress={() => selectCity(item)}
                     >
                       <View style={styles.suggestionIcon}>
@@ -468,7 +451,6 @@ export default function HomeScreen(): React.ReactElement {
                         <Text style={styles.historyTitle}>
                           RECIENTES RESULTADOS
                         </Text>
-                        {/* Aquí podrías mapear ciudades por defecto */}
                       </View>
                     )
                   }
@@ -485,7 +467,6 @@ export default function HomeScreen(): React.ReactElement {
       >
         <Text style={styles.dateTime}>Clima en tiempo real</Text>
 
-        {/* The main card switches between loader, weather data, and retry state. */}
         {locating ? (
           <View style={[styles.mainCard, styles.loaderCard]}>
             <ActivityIndicator color="#0ea5e9" />
@@ -495,7 +476,6 @@ export default function HomeScreen(): React.ReactElement {
           </View>
         ) : currentWeather ? (
           <LinearGradient colors={currentTheme.primary} style={styles.mainCard}>
-            {/* This section shows the main summary for the current location. */}
             <View style={styles.mainCardHeader}>
               <View>
                 <Text style={styles.cityText}>{currentWeather.city}</Text>
@@ -522,7 +502,6 @@ export default function HomeScreen(): React.ReactElement {
 
             <View style={styles.divider} />
 
-            {/* This row shows extra weather details returned by the backend. */}
             <View style={styles.detailsGrid}>
               <View style={styles.detailItem}>
                 <Ionicons name="water-outline" size={20} color="#fff" />
@@ -558,13 +537,11 @@ export default function HomeScreen(): React.ReactElement {
           </TouchableOpacity>
         )}
 
-        {/* This card shows a short suggestion based on the current weather. */}
         <TouchableOpacity
           style={[styles.alertCard, { borderLeftColor: advice.color }]}
         >
           <View style={styles.alertLeft}>
             <View style={[styles.alertIconBg, { backgroundColor: advice.bg }]}>
-              {/* @ts-ignore: Ionicons receives a dynamic icon name from the advice object. */}
               <Ionicons name={advice.icon} size={24} color={advice.color} />
             </View>
             <View style={styles.alertTextContainer}>
@@ -582,7 +559,6 @@ export default function HomeScreen(): React.ReactElement {
           />
         </TouchableOpacity>
 
-        {/* Favorite cities are listed here, and each row can open a details modal. */}
         <View style={[styles.sectionCard, { marginBottom: 30 }]}>
           <Text style={[styles.sectionTitle, { marginBottom: 10 }]}>
             Tus Cuidades Favoritas
@@ -632,8 +608,7 @@ export default function HomeScreen(): React.ReactElement {
                         {
                           text: "Eliminar",
                           style: "destructive",
-                          onPress: () =>
-                            removeFavorite(item.city_name || item.city),
+                          onPress: () => removeFavorite(item.city),
                         },
                       ],
                     );
@@ -651,7 +626,6 @@ export default function HomeScreen(): React.ReactElement {
           )}
         </View>
       </ScrollView>
-      {/* This bottom modal shows the full details for one favorite city. */}
       <Modal
         animationType="slide"
         transparent={true}
@@ -733,10 +707,7 @@ export default function HomeScreen(): React.ReactElement {
                             text: "Sí, eliminar",
                             style: "destructive",
                             onPress: () =>
-                              removeFavorite(
-                                selectedFavWeather!.city_name ||
-                                  selectedFavWeather!.city,
-                              ),
+                              removeFavorite(selectedFavWeather!.city),
                           },
                         ],
                       );
@@ -1028,7 +999,7 @@ const styles = StyleSheet.create({
   alertLeft: {
     flexDirection: "row",
     alignItems: "center",
-    flex: 1, // Crucial para que el texto no desborde la pantalla
+    flex: 1,
   },
   alertIconBg: {
     width: 45,
@@ -1114,7 +1085,7 @@ const styles = StyleSheet.create({
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(15, 23, 42, 0.6)", // Un azul oscuro traslúcido
+    backgroundColor: "rgba(15, 23, 42, 0.6)",
     justifyContent: "flex-end",
   },
   searchContainer: {
@@ -1214,7 +1185,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   resultsBody: {
-    flex: 1, // Esto permite que la lista ocupe el resto del modal
+    flex: 1,
     paddingTop: 10,
   },
 

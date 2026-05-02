@@ -23,14 +23,12 @@ const { width, height } = Dimensions.get("window");
 export default function ChangePasswordScreen() {
   const router = useRouter();
 
-  // Estados del formulario
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [updating, setUpdating] = useState(false);
   const [focusedField, setFocusedField] = useState<string | null>(null);
 
-  // Animaciones de nubes (Reutilizando tu lógica de EditProfile)
   const cloud1Anim = useRef(new Animated.Value(width)).current;
   const cloud2Anim = useRef(new Animated.Value(width + 150)).current;
 
@@ -106,7 +104,6 @@ export default function ChangePasswordScreen() {
     <View style={styles.container}>
       <Stack.Screen options={{ headerShown: false }} />
 
-      {/* Nubes Animadas */}
       <Animated.View
         style={[
           styles.cloud,
@@ -133,7 +130,6 @@ export default function ChangePasswordScreen() {
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
         >
-          {/* Header con estilo unificado */}
           <View style={styles.header}>
             <Text style={styles.title}>Seguridad</Text>
             <Text style={styles.subtitle}>
@@ -141,9 +137,7 @@ export default function ChangePasswordScreen() {
             </Text>
           </View>
 
-          {/* Formulario */}
           <View style={styles.form}>
-            {/* Contraseña Actual */}
             <View
               style={[
                 styles.inputWrapper,
@@ -168,7 +162,6 @@ export default function ChangePasswordScreen() {
               />
             </View>
 
-            {/* Nueva Contraseña */}
             <View
               style={[
                 styles.inputWrapper,
@@ -193,7 +186,6 @@ export default function ChangePasswordScreen() {
               />
             </View>
 
-            {/* Confirmar Nueva Contraseña */}
             <View
               style={[
                 styles.inputWrapper,
@@ -264,7 +256,7 @@ const styles = StyleSheet.create({
   icon: { marginRight: 12 },
   input: { flex: 1, color: "#1e293b", fontSize: 16 },
   button: {
-    backgroundColor: "#0f172a", // Manteniendo el tono oscuro profesional
+    backgroundColor: "#0f172a",
     height: 60,
     borderRadius: 16,
     justifyContent: "center",

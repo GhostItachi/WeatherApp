@@ -11,13 +11,14 @@ import {
   Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Stack, useRouter, useFocusEffect } from "expo-router";
+import { useRouter, useFocusEffect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import apiClient from "../src/api/client";
 import * as Location from "expo-location";
 import { getWeatherTheme } from "../src/constants/themes";
+import { WeatherBackground } from "../src/constants/weatherbg";
 const { width } = Dimensions.get("window");
 
 export default function ProfileScreen(): React.ReactElement {
@@ -90,7 +91,7 @@ export default function ProfileScreen(): React.ReactElement {
       }
     }, [fetchFreshProfile]),
   );
-  const currentTheme = getWeatherTheme(themeDesc);
+  const theme = getWeatherTheme(themeDesc);
 
   // First load uses cache for speed and then refreshes the profile and local weather.
   useEffect(() => {
@@ -334,29 +335,34 @@ export default function ProfileScreen(): React.ReactElement {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView showsVerticalScrollIndicator={false}>
+      <View style={styles.topBar}>
+        <TouchableOpacity style={styles.iconBtn} onPress={() => router.back()}>
+          <Ionicons name="chevron-back" size={24} color="#000000" />
+        </TouchableOpacity>
+        <View style={styles.locationContainer}>
+          <Text style={styles.topText}>Perfil</Text>
+        </View>
+        <TouchableOpacity
+          style={styles.iconBtn}
+          onPress={() => router.push("/settings")}
+        >
+          <Ionicons name="settings-outline" size={24} color="#000000" />
+        </TouchableOpacity>
+      </View>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+      >
         {/* The header shows the user identity and quick navigation actions. */}
         <LinearGradient
-          colors={currentTheme.primary}
-          style={styles.headerGradient}
+          colors={theme.primary}
+          style={[styles.headerGradient, { overflow: "hidden" }]}
         >
-          <View style={styles.topButtons}>
-            <TouchableOpacity
-              style={styles.iconBtn}
-              onPress={() => router.back()}
-            >
-              <Ionicons name="chevron-back" size={24} color="#000000" />
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.iconBtn}
-              onPress={() => router.push("/settings")}
-            >
-              <Ionicons name="settings-outline" size={24} color="#000000" />
-            </TouchableOpacity>
-          </View>
-
           <View style={styles.profileInfo}>
             <View style={styles.imageContainer}>
+              <View style={{ opacity: 0.4 }}>
+                <WeatherBackground themeName={theme.name} />
+              </View>
               <Image
                 source={{
                   uri: `https://ui-avatars.com/api/?name=${displayName}&background=fff&color=3b82f6`,
@@ -491,31 +497,24 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#f8fafc",
   },
+  scrollContent: {
+    paddingHorizontal: 15,
+  },
   headerGradient: {
     borderTopLeftRadius: 30,
     borderTopRightRadius: 30,
     paddingBottom: 40,
     borderBottomLeftRadius: 30,
     borderBottomRightRadius: 30,
-  },
-  topButtons: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    paddingHorizontal: 20,
-    marginTop: 10,
+    padding: 20,
+    marginBottom: 20,
   },
   iconBtn: {
     width: 40,
     height: 40,
-    borderRadius: 12,
-    backgroundColor: "#fff",
+    backgroundColor: "transparent",
     justifyContent: "center",
     alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 5,
-    elevation: 2,
   },
   profileInfo: {
     alignItems: "center",
@@ -562,7 +561,7 @@ const styles = StyleSheet.create({
   statsRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    paddingHorizontal: 20,
+    paddingHorizontal: 10,
     marginTop: -30,
   },
   statCard: {
@@ -700,5 +699,21 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     color: "#334155",
     marginLeft: 12,
+  },
+  locationContainer: {
+    alignItems: "center",
+  },
+  topText: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#0369a1",
+  },
+  topBar: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    backgroundColor: "transparent",
   },
 });
