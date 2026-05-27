@@ -5,17 +5,14 @@ import {
   StyleSheet,
   Animated,
   Dimensions,
-  TouchableOpacity,
   ScrollView,
 } from "react-native";
-import { useRouter, Stack } from "expo-router";
+import { Stack } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 
 const { width, height } = Dimensions.get("window");
 
 export default function AboutScreen() {
-  const router = useRouter();
-
   // Reusing cloud animations for total consistency
   const cloud1Anim = useRef(new Animated.Value(width)).current;
   const cloud2Anim = useRef(new Animated.Value(width + 150)).current;
@@ -45,7 +42,7 @@ export default function AboutScreen() {
 
     animateCloud(cloud1Anim, 30000);
     animateCloud(cloud2Anim, 20000, 5000);
-  }, []);
+  }, [cloud1Anim, cloud2Anim]);
 
   return (
     <View style={styles.container}>
@@ -92,9 +89,9 @@ export default function AboutScreen() {
           <View style={[styles.infoWrapper, styles.bioWrapper]}>
             <Text style={styles.label}>Technical Description</Text>
             <Text style={styles.description}>
-              Developed as a distributed system that integrates a RESTful API
-              in FastAPI with a mobile interface in React Native.
-              Focused on hardware optimization and efficient data persistence.
+              Developed as a distributed system that integrates a RESTful API in
+              FastAPI with a mobile interface in React Native. Focused on
+              hardware optimization and efficient data persistence.
             </Text>
           </View>
 
@@ -105,6 +102,7 @@ export default function AboutScreen() {
                 name="code-slash"
                 size={20}
                 color="#3b82f6"
+                /* eslint-disable-next-line react-native/no-inline-styles */
                 style={{ marginRight: 8 }}
               />
               <Text style={styles.value}>GhostItachi</Text>

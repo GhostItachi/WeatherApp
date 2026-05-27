@@ -14,7 +14,7 @@ import {
   Alert,
   ActivityIndicator,
 } from "react-native";
-import { useRouter, Stack } from "expo-router";
+import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 
@@ -64,7 +64,7 @@ export default function RegisterScreen(): React.ReactElement {
     });
 
     return () => animations.forEach((a) => a.stop());
-  }, []);
+  }, [rainAnimations]);
 
   const handleRegister = async () => {
     // The form is checked locally before the new user is sent to the backend.
@@ -159,6 +159,7 @@ export default function RegisterScreen(): React.ReactElement {
 
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
+        // eslint-disable-next-line react-native/no-inline-styles
         style={{ flex: 1 }}
       >
         <ScrollView

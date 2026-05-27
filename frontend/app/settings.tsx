@@ -38,7 +38,7 @@ export default function SettingsScreen() {
         "Se han eliminado los datos temporales. La próxima vez que entres a tu perfil, se descargarán datos frescos del servidor.",
         [{ text: "Entendido" }],
       );
-    } catch (e) {
+    } catch {
       Alert.alert("Error", "No se pudo limpiar el caché local.");
     }
   };
@@ -74,20 +74,6 @@ export default function SettingsScreen() {
         },
       ],
     );
-  };
-
-  const handleLogout = async () => {
-    Alert.alert("Cerrar Sesión", "¿Estás seguro de que deseas salir?", [
-      { text: "Cancelar", style: "cancel" },
-      {
-        text: "Cerrar Sesión",
-        onPress: async () => {
-          await AsyncStorage.removeItem("userToken");
-          await AsyncStorage.removeItem("user_data_cache");
-          router.replace("/");
-        },
-      },
-    ]);
   };
 
   return (
@@ -147,6 +133,7 @@ export default function SettingsScreen() {
           />
         </View>
 
+        {/* eslint-disable-next-line react-native/no-inline-styles */}
         <Text style={[styles.sectionTitle, { color: "#f43f5e" }]}>
           Acciones de Cuenta
         </Text>
@@ -155,9 +142,10 @@ export default function SettingsScreen() {
             style={styles.menuItem}
             onPress={handleDeleteAccount}
           >
-            <View style={[styles.menuIcon, { backgroundColor: "#fff1f2" }]}>
+            <View style={[styles.menuIcon]}>
               <Ionicons name="trash-outline" size={20} color="#f43f5e" />
             </View>
+            {/* eslint-disable-next-line react-native/no-inline-styles */}
             <Text style={[styles.menuText, { color: "#f43f5e" }]}>
               Eliminar Cuenta Permanente
             </Text>
@@ -167,7 +155,7 @@ export default function SettingsScreen() {
         <View style={styles.footerInfo}>
           <Text style={styles.footerVersion}>Build Version: 2.0.1-2026</Text>
           <Text style={styles.footerEnvironment}>
-            Entorno: Production (v1.0)
+            Entorno: Production (v2.0)
           </Text>
         </View>
       </ScrollView>
@@ -261,13 +249,6 @@ const styles = StyleSheet.create({
     marginRight: 15,
   },
   menuText: { flex: 1, fontSize: 15, color: "#334155", fontWeight: "500" },
-  versionText: {
-    textAlign: "center",
-    color: "#94a3b8",
-    fontSize: 12,
-    marginTop: 40,
-    marginBottom: 20,
-  },
   footerInfo: {
     marginTop: 40,
     marginBottom: 20,

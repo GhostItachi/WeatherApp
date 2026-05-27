@@ -3,19 +3,18 @@ from dotenv import load_dotenv
 from fastapi.middleware.cors import CORSMiddleware
 import os
 
-# Environment variables are loaded before routers and auth use them.
+# Environment variables must be loaded before auth and routers read configuration.
 load_dotenv()
 
 from .database import engine, Base
 from .routers import users, weather
 
-# Tables are created on startup if they do not exist yet.
+# SQLAlchemy creates missing local tables during application startup.
 Base.metadata.create_all(bind=engine)
 
-# This is the main FastAPI application object.
 app = FastAPI(title="WeatherApp API")
 
-# Configure CORS to allow frontend communication
+# Local development allows Expo, web, and admin dashboard origins.
 allowed_origins = [
     "http://localhost:19000",
     "http://localhost:19001",
@@ -24,6 +23,8 @@ allowed_origins = [
     "http://127.0.0.1:19001",
     "http://localhost:8081",
     "http://127.0.0.1:8081",
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
 ]
 
 if os.getenv("ENVIRONMENT") == "production":
@@ -39,12 +40,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Each router adds its own endpoints to the main app.
 app.include_router(users.router)
 app.include_router(weather.router)
 
 
 @app.get("/")
 def root():
-    # This route is a simple health message for quick checks.
     return {"message": "Welcome to the WeatherApp API"}

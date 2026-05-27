@@ -13,10 +13,11 @@ import {
   Alert,
   ActivityIndicator,
 } from "react-native";
-import { useRouter, Stack } from "expo-router";
+import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import AppLoader from "../components/AppLoader";
+import { useAuth } from "../src/context/AuthContext";
 
 // This shared client sends all frontend requests to the backend API.
 import apiClient from "../src/api/client";
@@ -25,7 +26,7 @@ const { width, height } = Dimensions.get("window");
 
 export default function LoginScreen(): React.ReactElement {
   const router = useRouter();
-
+  const { login, authState, isLoading } = useAuth();
   const [isChecking, setIsChecking] = useState(true);
 
   // These states store the login form values and the request state.
@@ -39,23 +40,32 @@ export default function LoginScreen(): React.ReactElement {
 
   useEffect(() => {
     const checkSession = async () => {
-      // If a valid token already exists, the user is sent directly to Home.
       try {
         const token = await AsyncStorage.getItem("userToken");
         if (token) {
-          await apiClient.get("/users/me", {
+          const response = await apiClient.get("/users/me", {
             headers: { Authorization: `Bearer ${token}` },
           });
+
+          await login(token, response.data.role, response.data.email);
           router.replace("/home");
         } else {
-          setIsChecking(false); // No hay token, mostramos el login
+          setIsChecking(false);
         }
-      } catch (error) {
-        setIsChecking(false); // Error o token expirado, mostramos login
+      } catch {
+        setIsChecking(false);
       }
     };
     checkSession();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (!isLoading && authState.token) {
+      setIsChecking(false);
+      router.replace("/home");
+    }
+  }, [authState.token, isLoading, router]);
 
   useEffect(() => {
     // This helper creates an infinite cloud animation.
@@ -83,10 +93,9 @@ export default function LoginScreen(): React.ReactElement {
 
     animateCloud(cloud1Anim, 30000);
     animateCloud(cloud2Anim, 20000, 5000);
-  }, [cloud1Anim, cloud2Anim, width]);
+  }, [cloud1Anim, cloud2Anim]);
 
   const handleLogin = async () => {
-    // The screen blocks empty submissions before calling the backend.
     if (!email || !password) {
       Alert.alert("Error", "Please complete all fields");
       return;
@@ -94,7 +103,6 @@ export default function LoginScreen(): React.ReactElement {
 
     setLoading(true);
     try {
-      // FastAPI OAuth2 expects the credentials inside a FormData body.
       const formData = new FormData();
       formData.append("username", email);
       formData.append("password", password);
@@ -103,13 +111,21 @@ export default function LoginScreen(): React.ReactElement {
         headers: { "Content-Type": "multipart/form-data" },
       });
 
-      // The token is saved locally to keep the user logged in.
-      const { access_token } = response.data;
+      const { access_token, role } = response.data;
 
-      await AsyncStorage.setItem("userToken", access_token);
+      // Older login responses are supported by reading the role from /users/me.
+      let finalRole = role;
+      if (!finalRole) {
+        const userRes = await apiClient.get("/users/me", {
+          headers: { Authorization: `Bearer ${access_token}` },
+        });
+        finalRole = userRes.data.role;
+      }
 
-      console.log("Successful login, token saved");
+      await login(access_token, finalRole, email);
       router.replace("/home");
+
+      console.log("Login exitoso con rol:", finalRole);
     } catch (error: any) {
       const errorDetail =
         error.response?.data?.detail || "Could not connect to server";
@@ -125,7 +141,6 @@ export default function LoginScreen(): React.ReactElement {
 
   return (
     <View style={styles.container}>
-      {/* Decorative clouds make the login screen feel lighter and more dynamic. */}
       <Animated.View
         style={[
           styles.cloud,
@@ -146,20 +161,19 @@ export default function LoginScreen(): React.ReactElement {
 
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
+        // eslint-disable-next-line react-native/no-inline-styles
         style={{ flex: 1 }}
       >
         <ScrollView
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
         >
-          {/* This header introduces the app before the form. */}
           <View style={styles.header}>
             <Ionicons name="sunny" size={80} color="#f59e0b" />
             <Text style={styles.title}>WeatherApp</Text>
             <Text style={styles.subtitle}>Your weather, in one place</Text>
           </View>
 
-          {/* The form collects credentials and starts the login request. */}
           <View style={styles.form}>
             <View style={styles.inputWrapper}>
               <Ionicons
@@ -197,12 +211,12 @@ export default function LoginScreen(): React.ReactElement {
             </View>
 
             <TouchableOpacity
+              // eslint-disable-next-line react-native/no-inline-styles
               style={[styles.button, loading && { opacity: 0.7 }]}
               activeOpacity={0.8}
               onPress={handleLogin}
               disabled={loading}
             >
-              {/* The button shows a spinner while the login request is running. */}
               {loading ? (
                 <ActivityIndicator color="#fff" />
               ) : (

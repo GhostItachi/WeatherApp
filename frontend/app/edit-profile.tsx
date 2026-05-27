@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   View,
   Text,
@@ -13,7 +13,7 @@ import {
   Alert,
   ActivityIndicator,
 } from "react-native";
-import { useRouter, Stack } from "expo-router";
+import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import apiClient from "../src/api/client";
@@ -36,6 +36,24 @@ export default function EditProfileScreen() {
   // These animated values reuse the moving cloud background from the login screen.
   const cloud1Anim = useRef(new Animated.Value(width)).current;
   const cloud2Anim = useRef(new Animated.Value(width + 150)).current;
+  const loadUserData = useCallback(async () => {
+    // The current profile is loaded from the protected /users/me endpoint.
+    setLoading(true);
+    try {
+      const token = await AsyncStorage.getItem("userToken");
+      const response = await apiClient.get("/users/me", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setFullName(response.data.full_name || "");
+      setEmail(response.data.email || "");
+      setBio(response.data.bio || "");
+    } catch (e: any) {
+      console.warn("Error cargando perfil:", e);
+      if (e.response?.status === 401) router.replace("/");
+    } finally {
+      setLoading(false);
+    }
+  }, [router]);
 
   useEffect(() => {
     loadUserData();
@@ -64,26 +82,7 @@ export default function EditProfileScreen() {
 
     animateCloud(cloud1Anim, 30000);
     animateCloud(cloud2Anim, 20000, 5000);
-  }, []);
-
-  const loadUserData = async () => {
-    // The current profile is loaded from the protected /users/me endpoint.
-    setLoading(true);
-    try {
-      const token = await AsyncStorage.getItem("userToken");
-      const response = await apiClient.get("/users/me", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      setFullName(response.data.full_name || "");
-      setEmail(response.data.email || "");
-      setBio(response.data.bio || "");
-    } catch (e: any) {
-      console.warn("Error cargando perfil:", e);
-      if (e.response?.status === 401) router.replace("/");
-    } finally {
-      setLoading(false);
-    }
-  };
+  }, [cloud1Anim, cloud2Anim, loadUserData]);
 
   const handleUpdate = async () => {
     // The form is validated first, then the updated fields are sent to the backend.
@@ -102,7 +101,7 @@ export default function EditProfileScreen() {
       );
       Alert.alert("Éxito", "Perfil actualizado correctamente");
       router.back();
-    } catch (error: any) {
+    } catch {
       Alert.alert("Error", "No se pudo actualizar el perfil");
     } finally {
       setUpdating(false);
@@ -119,7 +118,6 @@ export default function EditProfileScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Animated clouds keep the same visual language as the auth screens. */}
       <Animated.View
         style={[
           styles.cloud,
@@ -140,13 +138,13 @@ export default function EditProfileScreen() {
 
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
+        // eslint-disable-next-line react-native/no-inline-styles
         style={{ flex: 1 }}
       >
         <ScrollView
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
         >
-          {/* This header explains the screen purpose and keeps the back action visible. */}
           <View style={styles.header}>
             <Ionicons name="person-circle" size={80} color="#3b82f6" />
             <Text style={styles.title}>Edita tu perfil</Text>
@@ -155,7 +153,6 @@ export default function EditProfileScreen() {
             </Text>
           </View>
 
-          {/* The form lets the user update name, email, and bio. */}
           <View style={styles.form}>
             <View
               style={[
@@ -216,6 +213,7 @@ export default function EditProfileScreen() {
                 name="document-text-outline"
                 size={20}
                 color="#64748b"
+                // eslint-disable-next-line react-native/no-inline-styles
                 style={[styles.icon, { marginTop: 18 }]}
               />
               <TextInput
@@ -223,6 +221,7 @@ export default function EditProfileScreen() {
                 placeholderTextColor="#94a3b8"
                 style={[
                   styles.input,
+                  // eslint-disable-next-line react-native/no-inline-styles
                   { textAlignVertical: "top", paddingTop: 18 },
                 ]}
                 value={bio}
@@ -235,6 +234,7 @@ export default function EditProfileScreen() {
             </View>
 
             <TouchableOpacity
+              // eslint-disable-next-line react-native/no-inline-styles
               style={[styles.button, updating && { opacity: 0.7 }]}
               onPress={handleUpdate}
               disabled={updating}

@@ -1,18 +1,17 @@
 from pydantic import BaseModel, EmailStr
 from typing import List, Optional
+from datetime import datetime
 
 
-# This base schema describes a favorite city name.
+# Favorite city schemas share the same city-name contract.
 class FavoriteCityBase(BaseModel):
     city_name: str
 
 
-# The client uses this schema when it sends a new favorite city.
 class FavoriteCityCreate(FavoriteCityBase):
     pass
 
 
-# This schema is returned after a favorite city is saved.
 class FavoriteCityOut(FavoriteCityBase):
     id: int
     user_id: int
@@ -21,30 +20,31 @@ class FavoriteCityOut(FavoriteCityBase):
         from_attributes = True
 
 
-# These fields are shared by user input and output schemas.
+# User schemas share the editable profile fields.
 class UserBase(BaseModel):
     email: EmailStr
     full_name: Optional[str] = None
     bio: Optional[str] = None
 
 
-# This schema is used when a new account is created.
 class UserCreate(UserBase):
     password: str
 
 
-# This schema is used to update only some user fields.
 class UserUpdate(BaseModel):
     full_name: Optional[str] = None
     email: Optional[EmailStr] = None
     bio: Optional[str] = None
 
 
-# This schema returns safe user data without the password hash.
+# Public user responses never expose the password hash.
 class UserOut(UserBase):
     id: int
+    email: EmailStr
+    full_name: Optional[str] = None
     favorites: List[FavoriteCityBase] = []
     bio: Optional[str] = None
+    role: str
 
     class Config:
         from_attributes = True
@@ -63,7 +63,7 @@ class ForecastItem(BaseModel):
     icon: str
 
 
-# This schema defines the weather payload returned to the frontend.
+# Weather responses normalize OpenWeather payloads for frontend screens.
 class WeatherResponse(BaseModel):
     city: str
     temperature: float
@@ -82,6 +82,16 @@ class WeatherResponse(BaseModel):
         from_attributes = True
 
 
-# This schema includes the normalized city name for favorites deletion
 class FavoriteWeatherResponse(WeatherResponse):
-    city_name: str  # Normalized name (e.g., "Madrid, ES") for deletion
+    city_name: str
+
+
+class AuditLogOut(BaseModel):
+    id: int
+    level: str
+    message: str
+    user_email: Optional[str] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True

@@ -1,21 +1,29 @@
-import React, { useEffect, useState, useCallback, useRef } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Dimensions,
   ActivityIndicator,
   Image,
   AppState,
   TextInput,
   Modal,
+  Animated,
   FlatList,
   Alert,
-  Animated,
 } from "react-native";
-import { Stack, useRouter, useFocusEffect } from "expo-router";
+import Reanimated, {
+  FadeInDown,
+  FadeOutLeft,
+  LinearTransition,
+} from "react-native-reanimated";
+import {
+  Swipeable,
+  GestureHandlerRootView,
+} from "react-native-gesture-handler";
+import { useRouter, useFocusEffect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
@@ -26,6 +34,8 @@ import AppLoader from "../components/AppLoader";
 import { getWeatherTheme } from "../src/constants/themes";
 import { WeatherBackground } from "../src/constants/weatherbg";
 import LottieView from "lottie-react-native";
+import { COLORS, AppColors } from "../src/constants/design";
+import { useAuth } from "../src/context/AuthContext";
 
 // This type matches the weather details rendered on the Home screen.
 interface WeatherData {
@@ -61,12 +71,27 @@ interface ForecastItem {
   icon: string;
 }
 
+interface FavoriteListItemProps {
+  item: any;
+  index: number;
+  onShowDetails: (item: any) => void;
+  onRemove: (item: any) => void;
+  formatTemperature: (temp: number) => string;
+  unit: "metric" | "imperial";
+}
+
 export default function HomeScreen(): React.ReactElement {
   const router = useRouter();
+  const { userRole } = useAuth();
   // currentWeather stores the weather shown in the main location card.
   const [currentWeather, setCurrentWeather] = useState<WeatherData | null>(
     null,
   );
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [adminStats, setAdminStats] = useState<{
+    totalUsers: number;
+    apiCalls: number;
+  } | null>(null);
   const [unit, setUnit] = useState<"metric" | "imperial">("metric");
   // favorites stores the saved cities returned by the backend.
   const [favorites, setFavorites] = useState<WeatherData[]>([]);
@@ -104,11 +129,44 @@ export default function HomeScreen(): React.ReactElement {
       console.error("Error saving cache:", e);
     }
   };
+  const fetchFavorites = useCallback(
+    async (token: string) => {
+      try {
+        const response = await apiClient.get("/weather/favorites/my", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        setFavorites(response.data);
+      } catch (error: any) {
+        if (error.response?.status === 401) {
+          await AsyncStorage.multiRemove(["userToken", "userRole"]);
+          router.replace("/");
+        }
+        setFavorites([]);
+        console.warn("Could not load favorites:", error);
+      }
+    },
+    [router],
+  );
+  const formatTemperature = (celsius: number | undefined) => {
+    if (celsius === undefined || celsius === null) return "--°";
 
-  const fetchCurrentLocationWeather = async () => {
+    if (unit === "imperial") {
+      return `${Math.round((celsius * 9) / 5 + 32)}°F`;
+    }
+    return `${Math.round(celsius)}°C`;
+  };
+
+  const formatWindSpeed = (speedMs: number) => {
+    if (unit === "imperial") {
+      return `${(speedMs * 2.237).toFixed(1)} mph`;
+    }
+    return `${speedMs} m/s`;
+  };
+
+  const fetchCurrentLocationWeather = useCallback(async () => {
     setLocating(true);
     try {
-      // The GPS flow asks for permission, reads coordinates, and then calls the backend.
+      // Location permission and coordinates are required before calling the weather API.
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== "granted") {
         await loadCache();
@@ -141,17 +199,18 @@ export default function HomeScreen(): React.ReactElement {
     } finally {
       setLocating(false);
     }
-  };
+  }, []);
+
   useEffect(() => {
     const prepareApp = async () => {
-      // 1. Cargamos el caché de inmediato para que haya algo en pantalla
+      // Cached weather is shown first while the live location request runs.
       await loadCache();
-      // 2. Intentamos actualizar con la ubicación real
       await fetchCurrentLocationWeather();
     };
 
     prepareApp();
-  }, []);
+  }, [fetchCurrentLocationWeather]);
+
   useEffect(() => {
     const initializeData = async () => {
       try {
@@ -173,7 +232,31 @@ export default function HomeScreen(): React.ReactElement {
     };
 
     initializeData();
-  }, []);
+  }, [fetchCurrentLocationWeather, fetchFavorites, router]);
+
+  useEffect(() => {
+    const fetchAdminData = async () => {
+      if (userRole === "admin") {
+        try {
+          const token = await AsyncStorage.getItem("userToken");
+          if (!token) {
+            return;
+          }
+          const response = await apiClient.get("/users/stats", {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          setAdminStats(response.data);
+        } catch (error: any) {
+          if (error.response?.status === 401) {
+            return;
+          }
+          console.warn("Error cargando estadísticas de admin:", error);
+        }
+      }
+    };
+
+    fetchAdminData();
+  }, [userRole]);
 
   useFocusEffect(
     useCallback(() => {
@@ -193,37 +276,6 @@ export default function HomeScreen(): React.ReactElement {
       return () => {};
     }, []),
   );
-  const formatTemperature = (celsius: number | undefined) => {
-    if (celsius === undefined || celsius === null) return "--°";
-
-    if (unit === "imperial") {
-      return `${Math.round((celsius * 9) / 5 + 32)}°F`;
-    }
-    return `${Math.round(celsius)}°C`;
-  };
-
-  const formatWindSpeed = (speedMs: number) => {
-    if (unit === "imperial") {
-      return `${(speedMs * 2.237).toFixed(1)} mph`;
-    }
-    return `${speedMs} m/s`;
-  };
-
-  const fetchFavorites = async (token: string) => {
-    try {
-      const response = await apiClient.get("/weather/favorites/my", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      setFavorites(response.data);
-    } catch (error: any) {
-      if (error.response?.status === 401) {
-        await AsyncStorage.removeItem("userToken");
-        router.replace("/");
-      }
-      setFavorites([]);
-      console.warn("Could not load favorites:", error);
-    }
-  };
 
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (nextState) => {
@@ -253,7 +305,7 @@ export default function HomeScreen(): React.ReactElement {
           lon: city.lon || 0,
         }));
         setSuggestions(formattedData);
-      } catch (e) {
+      } catch {
         setSuggestions([]);
       } finally {
         setSearching(false);
@@ -275,12 +327,15 @@ export default function HomeScreen(): React.ReactElement {
         headers: { Authorization: `Bearer ${token}` },
       });
 
-      // Actualizamos la lista local inmediatamente para mejorar la UX
+      // Update local list immediately for better UX
       if (token) fetchFavorites(token);
 
-      Alert.alert("Eliminado", `${cityName} ha sido quitada de tus favoritos.`);
+      Alert.alert(
+        "Eliminada",
+        `${cityName} ha sido eliminada de tus favoritos.`,
+      );
     } catch (error) {
-      console.error("Error al eliminar favorito:", error);
+      console.error("Error removing favorite:", error);
       Alert.alert("Error", "No se pudo eliminar la ciudad.");
     }
   };
@@ -292,19 +347,19 @@ export default function HomeScreen(): React.ReactElement {
       const res = await apiClient.get("/weather/current-coord", {
         params: { lat: city.lat, lon: city.lon },
       });
-      const uniqueCityName = `${city.name}, ${city.country}`;
+      const selectedCityName = `${city.name}, ${city.country}`;
       Alert.alert(
-        `${uniqueCityName}: ${Math.round(res.data.temperature)}°C`,
-        `¿Deseas agregar esta ciudad a tus favoritos?`,
+        `${selectedCityName}: ${Math.round(res.data.temperature)}°C`,
+        `¿Quieres agregar esta ciudad a tus favoritos?`,
         [
-          { text: "Cerrar", style: "cancel" },
+          { text: "Cancelar", style: "cancel" },
           {
-            text: "Agregar",
+            text: "Añadir",
             onPress: async () => {
               try {
                 await apiClient.post(
                   "/weather/favorites",
-                  { city_name: uniqueCityName },
+                  { city_name: `${city.name},${city.country}` },
                   { headers: { Authorization: `Bearer ${token}` } },
                 );
                 if (token) fetchFavorites(token);
@@ -312,27 +367,116 @@ export default function HomeScreen(): React.ReactElement {
                 setSearchQuery("");
                 Alert.alert(
                   "Éxito",
-                  `${res.data.city} se añadió a tus favoritos.`,
+                  `${selectedCityName} fue agregada a tus favoritos.`,
                 );
               } catch (error: any) {
                 const errorMessage =
                   error.response?.data?.detail ||
-                  "No se pudo agregar la ciudad a favoritos.";
+                  "No se pudo agregar la ciudad a los favoritos.";
                 const isDuplicate = error.response?.status === 400;
-                Alert.alert(isDuplicate ? "Aviso" : "Error", errorMessage);
+                Alert.alert(
+                  isDuplicate ? "Advertencia" : "Error",
+                  errorMessage,
+                );
               }
             },
           },
         ],
       );
-    } catch (e) {
-      Alert.alert(
-        "Error",
-        "No se encontró la ciudad o hubo un problema de conexión.",
-      );
+    } catch {
+      Alert.alert("Error", "City not found or connection problem.");
     } finally {
       setSearching(false);
     }
+  };
+
+  const FavoriteListItem: React.FC<FavoriteListItemProps> = ({
+    item,
+    index,
+    onShowDetails,
+    onRemove,
+    formatTemperature,
+    unit,
+  }) => {
+    const renderRightActions = (
+      _progress: Animated.AnimatedInterpolation<number | string>,
+      _dragX: Animated.AnimatedInterpolation<number | string>,
+    ) => {
+      return (
+        <TouchableOpacity
+          onPress={() => onRemove(item)}
+          style={styles.swipeDeleteAction}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="trash" size={26} color="#fff" />
+          <Text style={styles.swipeDeleteText}>Quitar</Text>
+        </TouchableOpacity>
+      );
+    };
+    return (
+      <Reanimated.View
+        entering={FadeInDown.delay(index * 100).duration(500)}
+        exiting={FadeOutLeft.duration(400)}
+        // LinearTransition keeps row removal animations stable across platforms.
+        layout={LinearTransition.springify()}
+        // eslint-disable-next-line react-native/no-inline-styles
+        style={{ overflow: "hidden" }}
+      >
+        <GestureHandlerRootView>
+          <Swipeable
+            renderRightActions={renderRightActions}
+            friction={2}
+            rightThreshold={80}
+            containerStyle={styles.swipeableContainer}
+          >
+            <TouchableOpacity
+              onPress={() => onShowDetails(item)}
+              style={styles.favListItem}
+              activeOpacity={0.7}
+            >
+              <View style={styles.favListLeft}>
+                <Text style={styles.favListCity} numberOfLines={1}>
+                  {item.city}
+                </Text>
+                <Text style={styles.favListDesc} numberOfLines={1}>
+                  {item.description}
+                </Text>
+              </View>
+
+              <Image
+                source={{
+                  uri: `https://openweathermap.org/img/wn/${item.icon}@2x.png`,
+                }}
+                style={styles.favListIcon}
+              />
+
+              <View
+                style={[
+                  styles.favListTempContainer,
+                  // eslint-disable-next-line react-native/no-inline-styles
+                  {
+                    borderColor: item.temperature > 20 ? "#f59e0b" : "#0ea5e9",
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.favListTempNumber,
+                    // eslint-disable-next-line react-native/no-inline-styles
+                    { color: item.temperature > 20 ? "#f59e0b" : "#0ea5e9" },
+                  ]}
+                >
+                  {Math.round(item.temperature)}
+                </Text>
+                <Text style={styles.favListTempUnit}>
+                  {unit === "metric" ? "°C" : "°F"}
+                </Text>
+              </View>
+            </TouchableOpacity>
+          </Swipeable>
+        </GestureHandlerRootView>
+      </Reanimated.View>
+    );
   };
 
   if (loading) {
@@ -373,7 +517,7 @@ export default function HomeScreen(): React.ReactElement {
     };
 
     return {
-      visibility: visibility ? (visibility / 1000).toFixed(1) : "N/A", // Km
+      visibility: visibility ? (visibility / 1000).toFixed(1) : "N/A",
       sunrise: sunrise ? formatTime(sunrise) : "--:--",
       sunset: sunset ? formatTime(sunset) : "--:--",
       humidity: humidity || 0,
@@ -383,7 +527,6 @@ export default function HomeScreen(): React.ReactElement {
 
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
-      {/* The top bar opens search on the left and the profile screen on the right. */}
       <View style={styles.topBar}>
         <TouchableOpacity onPress={() => setSearchVisible(true)}>
           <Ionicons name="search" size={26} color="#0ea5e9" />
@@ -392,20 +535,22 @@ export default function HomeScreen(): React.ReactElement {
           <Text style={styles.locationText}>WeatherApp</Text>
         </View>
         <TouchableOpacity onPress={() => router.push("/profile")}>
-          <Ionicons name="person-circle-outline" size={30} color="#1e293b" />
+          <Ionicons
+            name="person-circle-outline"
+            size={30}
+            color={AppColors.slate900}
+          />
         </TouchableOpacity>
       </View>
 
-      {/* This modal lets the user search cities and add one to favorites. */}
       <Modal visible={searchVisible} animationType="slide" transparent={true}>
         <View style={styles.modalOverlay}>
           <View style={styles.searchContainer}>
-            {/* HEADER DEL MODAL */}
             <View style={styles.searchHeader}>
               <View style={styles.searchInputWrapper}>
-                <Ionicons name="search" size={20} color="#3b82f6" />
+                <Ionicons name="search" size={20} color={AppColors.blue500} />
                 <TextInput
-                  placeholder="Buscar ciudad..."
+                  placeholder="Buscar..."
                   placeholderTextColor="#94a3b8"
                   style={styles.searchInput}
                   value={searchQuery}
@@ -429,11 +574,10 @@ export default function HomeScreen(): React.ReactElement {
               </TouchableOpacity>
             </View>
 
-            {/* CUERPO DE RESULTADOS */}
             <View style={styles.resultsBody}>
               {searching ? (
                 <View style={styles.loaderContainer}>
-                  <ActivityIndicator size="large" color="#3b82f6" />
+                  <ActivityIndicator size="large" color={AppColors.blue500} />
                   <Text style={styles.loaderTextSearch}>
                     Buscando en el mapa...
                   </Text>
@@ -443,17 +587,17 @@ export default function HomeScreen(): React.ReactElement {
                   data={suggestions}
                   keyExtractor={(item, index) =>
                     item.id?.toString() || index.toString()
-                  } // Supone que tu API devuelve objetos, no solo strings
+                  }
                   renderItem={({ item }: { item: CitySuggestion }) => (
                     <TouchableOpacity
-                      style={styles.suggestionItemSearch} // Usamos el estilo correcto con padding
+                      style={styles.suggestionItemSearch}
                       onPress={() => selectCity(item)}
                     >
                       <View style={styles.suggestionIcon}>
                         <Ionicons
                           name="location-sharp"
                           size={20}
-                          color="#64748b"
+                          color={AppColors.slate500}
                         />
                       </View>
                       <View style={styles.suggestionInfo}>
@@ -468,7 +612,7 @@ export default function HomeScreen(): React.ReactElement {
                       <Ionicons
                         name="heart-outline"
                         size={24}
-                        color="#3b82f6"
+                        color={AppColors.blue500}
                       />
                     </TouchableOpacity>
                   )}
@@ -481,15 +625,12 @@ export default function HomeScreen(): React.ReactElement {
                           color="#e2e8f0"
                         />
                         <Text style={styles.emptyTextSearch}>
-                          No encontramos esa ciudad
+                          We didn't find that city
                         </Text>
                       </View>
                     ) : (
                       <View style={styles.emptyContainer}>
-                        <Text style={styles.historyTitle}>
-                          RECIENTES RESULTADOS
-                        </Text>
-                        {/* Aquí podrías mapear ciudades por defecto */}
+                        <Text style={styles.historyTitle}>Historial</Text>
                       </View>
                     )
                   }
@@ -504,7 +645,6 @@ export default function HomeScreen(): React.ReactElement {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
-        {/* The main card switches between loader, weather data, and retry state. */}
         {locating ? (
           <View style={[styles.mainCard, styles.loaderCard]}>
             <ActivityIndicator color="#0ea5e9" />
@@ -513,12 +653,8 @@ export default function HomeScreen(): React.ReactElement {
             </Text>
           </View>
         ) : currentWeather ? (
-          <LinearGradient
-            colors={currentTheme.primary}
-            style={[styles.mainCard, { overflow: "hidden" }]}
-          >
+          <LinearGradient colors={currentTheme.primary} style={styles.mainCard}>
             <WeatherBackground themeName={currentTheme.name} />
-            {/* This section shows the main summary for the current location. */}
             {!isRealTime && (
               <View style={styles.cacheBadge}>
                 <Ionicons
@@ -552,15 +688,13 @@ export default function HomeScreen(): React.ReactElement {
                   </Text>
                 </View>
                 <Text style={styles.feelsLikeText}>
-                  Sensación térmica:{" "}
-                  {formatTemperature(currentWeather.feels_like)}
+                  Sensación: {formatTemperature(currentWeather.feels_like)}
                 </Text>
               </View>
             </View>
 
             <View style={styles.divider} />
 
-            {/* This row shows extra weather details returned by the backend. */}
             <View style={styles.detailsGrid}>
               <View style={styles.detailItem}>
                 <Ionicons name="water-outline" size={20} color="#fff" />
@@ -593,13 +727,12 @@ export default function HomeScreen(): React.ReactElement {
               >
                 {currentWeather?.forecast
                   ? currentWeather.forecast
-                      /* 1. Filtramos: Solo mostramos bloques cuya hora sea mayor a la actual */
+                      /* Keep only forecast blocks that are still in the future. */
                       .filter(
                         (item: ForecastItem) => item.dt > Date.now() / 1000,
                       )
-                      /* 2. Limitamos: Tomamos solo los primeros 6 resultados (las próximas 18 horas) */
+                      /* Show the next six forecast blocks to keep the card compact. */
                       .slice(0, 6)
-                      /* 3. Renderizamos: Mapeamos los datos ya filtrados */
                       .map((item: ForecastItem, index: number) => (
                         <ForecastCard key={index} item={item} />
                       ))
@@ -621,33 +754,30 @@ export default function HomeScreen(): React.ReactElement {
               source={require("../assets/animations/sad-cloud.json")}
               autoPlay
               loop
-              style={{ width: 80, height: 80 }}
+              style={styles.errorAnimation}
             />
             <View style={styles.errorTextContainer}>
               <Text style={styles.errorTitle}>Ubicación no disponible</Text>
               <View style={styles.retryAction}>
                 <Ionicons name="refresh" size={16} color="#0ea5e9" />
-                <Text style={styles.retryTextInline}>Toca para reintentar</Text>
+                <Text style={styles.retryTextInline}>Reintentar</Text>
               </View>
             </View>
           </TouchableOpacity>
         )}
         <View style={styles.detailsContainer}>
-          {/* Tarjeta de Amanecer/Atardecer */}
           <View style={styles.detailCard}>
             <Ionicons name="sunny-outline" size={24} color="#f59e0b" />
             <Text style={styles.detailLabelTips}>Amanecer</Text>
             <Text style={styles.detailValueTips}>{details?.sunrise}</Text>
           </View>
 
-          {/* Tarjeta de Visibilidad */}
           <View style={styles.detailCard}>
             <Ionicons name="eye-outline" size={24} color="#0ea5e9" />
             <Text style={styles.detailLabelTips}>Visibilidad</Text>
             <Text style={styles.detailValueTips}>{details?.visibility} km</Text>
           </View>
 
-          {/* Tarjeta de Atardecer */}
           <View style={styles.detailCard}>
             <Ionicons name="moon-outline" size={24} color="#6366f1" />
             <Text style={styles.detailLabelTips}>Atardecer</Text>
@@ -655,76 +785,90 @@ export default function HomeScreen(): React.ReactElement {
           </View>
         </View>
 
-        {/* Favorite cities are listed here, and each row can open a details modal. */}
-        <View style={[styles.sectionCard, { marginBottom: 30 }]}>
-          <Text style={[styles.sectionTitle, { marginBottom: 10 }]}>
-            Tus Cuidades Favoritas
-          </Text>
+        {userRole === "admin" && (
+          <TouchableOpacity
+            style={styles.adminCard}
+            onPress={() => router.push("/admin/dashboard")}
+            activeOpacity={0.9}
+          >
+            <LinearGradient
+              colors={["#4f46e5", "#6366f1"]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.adminGradient}
+            >
+              <View style={styles.adminIconCircle}>
+                <Ionicons name="stats-chart" size={22} color="#fff" />
+              </View>
+              <View style={styles.adminTextContainer}>
+                <Text style={styles.adminTitle}>Panel de Control</Text>
+                <Text style={styles.adminSubtitle}>
+                  Métricas del sistema y usuarios
+                </Text>
+              </View>
+              <Ionicons
+                name="chevron-forward"
+                size={20}
+                color="rgba(255,255,255,0.6)"
+              />
+            </LinearGradient>
+          </TouchableOpacity>
+        )}
+
+        <View style={styles.favoritesSection}>
+          <View style={styles.favSectionHeader}>
+            <Text style={styles.sectionTitle}>Ciudades Guardadas</Text>
+            {favorites.length > 0 && (
+              <Text style={styles.swipeHint}>
+                Swipe <Ionicons name="arrow-back" size={12} /> para quitar
+              </Text>
+            )}
+          </View>
+
           {favorites.length > 0 ? (
-            favorites.map((item, index) => (
-              <View key={index} style={styles.dailyRow}>
-                <View style={styles.dailyDayCol}>
-                  <Text style={styles.dailyDayName}>{item.city}</Text>
-                  <Text
-                    style={[
-                      styles.dailyDateText,
-                      { textTransform: "capitalize" },
-                    ]}
-                  >
-                    {item.description}
-                  </Text>
-                </View>
-
-                <Image
-                  source={{
-                    uri: `https://openweathermap.org/img/wn/${item.icon}.png`,
-                  }}
-                  style={{ width: 40, height: 40 }}
-                />
-
-                <View style={styles.dailyTempCol}>
-                  <Text style={styles.dailyHigh}>
-                    {formatTemperature(item.temperature)}
-                  </Text>
-                </View>
-
-                <TouchableOpacity
-                  onPress={() => handleShowDetails(item)}
-                  style={styles.detailsIconBtn}
-                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                >
-                  <Ionicons name="chevron-forward" size={24} color="#94a3b8" />
-                </TouchableOpacity>
-                <TouchableOpacity
-                  onPress={() => {
+            <View style={styles.favoritesList}>
+              {favorites.map((item, index) => (
+                <FavoriteListItem
+                  key={item.city_name || item.city}
+                  item={item}
+                  index={index}
+                  onShowDetails={handleShowDetails}
+                  onRemove={(cityItem) => {
                     Alert.alert(
-                      "Eliminar favorito",
-                      `¿Estás seguro de que quieres quitar ${item.city}?`,
+                      "Confirmar",
+                      `¿Quitar ${cityItem.city} de favoritos?`,
                       [
-                        { text: "Cancelar", style: "cancel" },
+                        { text: "No", style: "cancel" },
                         {
-                          text: "Eliminar",
+                          text: "Sí, Quitar",
                           style: "destructive",
                           onPress: () =>
-                            removeFavorite(item.city_name || item.city),
+                            removeFavorite(cityItem.city_name || cityItem.city),
                         },
                       ],
                     );
                   }}
-                  style={[styles.detailsIconBtn, { marginLeft: 10 }]}
-                >
-                  <Ionicons name="trash-outline" size={22} color="#ef4444" />
-                </TouchableOpacity>
-              </View>
-            ))
+                  formatTemperature={formatTemperature}
+                  unit={unit}
+                />
+              ))}
+            </View>
           ) : (
-            <Text style={styles.emptyText}>
-              No tienes ciudades favoritas aún.
-            </Text>
+            <View style={styles.emptyFavoritesContainer}>
+              <LottieView
+                source={require("../assets/animations/empty-heart.json")}
+                autoPlay
+                loop
+                style={styles.emptyAnimation}
+              />
+              <Text style={styles.emptyTextText}>
+                Tu lista está vacía. Busca una ciudad y toca el{" "}
+                <Ionicons name="heart-outline" /> para agregarla aquí.
+              </Text>
+            </View>
           )}
         </View>
       </ScrollView>
-      {/* This bottom modal shows the full details for one favorite city. */}
       <Modal
         animationType="slide"
         transparent={true}
@@ -737,7 +881,7 @@ export default function HomeScreen(): React.ReactElement {
               <>
                 <LinearGradient
                   colors={currentTheme.primary}
-                  style={[styles.modalHeaderGradient, { overflow: "hidden" }]}
+                  style={[styles.modalHeaderGradient]}
                 >
                   <WeatherBackground themeName={currentTheme.name} />
                   <TouchableOpacity
@@ -754,7 +898,7 @@ export default function HomeScreen(): React.ReactElement {
                     source={{
                       uri: `https://openweathermap.org/img/wn/${selectedFavWeather.icon}@4x.png`,
                     }}
-                    style={{ width: 100, height: 100 }}
+                    style={styles.modalWeatherIcon}
                   />
                   <Text style={styles.modalTemp}>
                     {formatTemperature(selectedFavWeather.temperature)}
@@ -763,8 +907,11 @@ export default function HomeScreen(): React.ReactElement {
                     {selectedFavWeather.description}
                   </Text>
                 </LinearGradient>
-
-                <View style={styles.modalBody}>
+                <ScrollView
+                  style={styles.modalBodyScroll}
+                  contentContainerStyle={styles.modalBodyContent}
+                  showsVerticalScrollIndicator={false}
+                >
                   <View style={styles.modalGrid}>
                     <View style={styles.modalGridItem}>
                       <Ionicons name="water" size={24} color="#0ea5e9" />
@@ -800,7 +947,7 @@ export default function HomeScreen(): React.ReactElement {
                     onPress={() => {
                       Alert.alert(
                         "Eliminar Ciudad",
-                        `¿Deseas quitar ${selectedFavWeather?.city} de tus favoritos?`,
+                        `¿Quieres eliminar ${selectedFavWeather?.city} de tus favoritos?`,
                         [
                           { text: "Cancelar", style: "cancel" },
                           {
@@ -818,10 +965,12 @@ export default function HomeScreen(): React.ReactElement {
                   >
                     <Ionicons name="trash-outline" size={20} color="#ef4444" />
                     <Text style={styles.deleteBtnText}>
-                      Eliminar de mis favoritos
+                      Eliminar de favoritos
                     </Text>
                   </TouchableOpacity>
-                </View>
+                  {/* eslint-disable-next-line react-native/no-inline-styles */}
+                  <View style={{ height: 30 }} />
+                </ScrollView>
               </>
             )}
           </View>
@@ -834,7 +983,7 @@ export default function HomeScreen(): React.ReactElement {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f1f5f9",
+    backgroundColor: COLORS.background,
   },
   topBar: {
     flexDirection: "row",
@@ -850,21 +999,13 @@ const styles = StyleSheet.create({
   locationText: {
     fontSize: 18,
     fontWeight: "bold",
-    color: "#0369a1",
-  },
-  paginationDots: {
-    flexDirection: "row",
-    marginTop: 4,
+    color: AppColors.sky900,
   },
   scrollContent: {
     paddingHorizontal: 15,
   },
-  dateTime: {
-    fontSize: 14,
-    color: "#64748b",
-    marginVertical: 15,
-  },
   mainCard: {
+    overflow: "hidden",
     borderRadius: 20,
     padding: 20,
     marginBottom: 20,
@@ -878,11 +1019,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
   },
-  weatherCondition: {
-    color: "#fff",
-    fontSize: 16,
-    opacity: 0.9,
-  },
   tempRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -894,137 +1030,11 @@ const styles = StyleSheet.create({
     fontWeight: "300",
     marginLeft: 10,
   },
-  feelsLike: {
-    color: "#fff",
-    fontSize: 14,
-    opacity: 0.8,
-  },
-  windInfo: {
-    alignItems: "flex-end",
-    justifyContent: "center",
-  },
-  windLabel: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "bold",
-    marginTop: 5,
-  },
-  windValue: {
-    color: "#fff",
-    fontSize: 12,
-    opacity: 0.8,
-  },
-  sectionCard: {
-    backgroundColor: "#fff",
-    borderRadius: 20,
-    padding: 15,
-    marginBottom: 15,
-    elevation: 2,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 5,
-  },
-  sectionHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
   sectionTitle: {
+    marginBottom: 10,
     fontSize: 16,
     fontWeight: "bold",
-    color: "#0369a1",
-  },
-  sectionSubtitle: {
-    fontSize: 13,
-    color: "#64748b",
-    marginVertical: 10,
-  },
-  hourlyItem: {
-    alignItems: "center",
-    marginRight: 20,
-    paddingVertical: 10,
-  },
-  hourlyTime: {
-    fontSize: 12,
-    color: "#94a3b8",
-  },
-  hourlyIcon: {
-    marginVertical: 8,
-  },
-  hourlyTemp: {
-    fontSize: 14,
-    fontWeight: "bold",
-    color: "#1e293b",
-  },
-  alertTitle: {
-    fontSize: 15,
-    fontWeight: "bold",
-    color: "#1e293b",
-  },
-  alertDesc: {
-    fontSize: 13,
-    color: "#64748b",
-  },
-  dailyRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: "#f1f5f9",
-  },
-  dailyDayCol: {
-    width: 70,
-  },
-  dailyDayName: {
-    fontSize: 14,
-    fontWeight: "bold",
-    color: "#1e293b",
-  },
-  dailyDateText: {
-    fontSize: 11,
-    color: "#94a3b8",
-  },
-  dailyTempCol: {
-    width: 60,
-  },
-  dailyHigh: {
-    fontSize: 15,
-    fontWeight: "bold",
-    color: "#ef4444",
-  },
-  dailyLow: {
-    color: "#3b82f6",
-    fontWeight: "normal",
-  },
-  dailyWindCol: {
-    flexDirection: "row",
-    alignItems: "center",
-    width: 80,
-  },
-  dailyWindText: {
-    fontSize: 11,
-    color: "#64748b",
-    marginLeft: 4,
-  },
-  suggestionItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: "#f1f5f9",
-  },
-  suggestionText: {
-    flex: 1,
-    marginLeft: 10,
-    fontSize: 15,
-    color: "#334155",
-  },
-  emptyText: {
-    textAlign: "center",
-    marginTop: 20,
-    color: "#94a3b8",
+    color: AppColors.sky900,
   },
   cityText: {
     color: "#fff",
@@ -1084,38 +1094,6 @@ const styles = StyleSheet.create({
     color: "#64748b",
     fontWeight: "500",
   },
-  alertCard: {
-    backgroundColor: "#fff",
-    borderRadius: 20,
-    padding: 15,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 15,
-    borderLeftWidth: 5,
-    elevation: 2,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 5,
-  },
-  alertLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    flex: 1,
-  },
-  alertIconBg: {
-    width: 45,
-    height: 45,
-    borderRadius: 12,
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: 12,
-  },
-  alertTextContainer: {
-    flex: 1,
-    paddingRight: 10,
-  },
   modalOverlayCity: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.5)",
@@ -1129,6 +1107,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   modalHeaderGradient: {
+    overflow: "hidden",
     alignItems: "center",
     paddingVertical: 40,
     borderBottomLeftRadius: 30,
@@ -1156,9 +1135,6 @@ const styles = StyleSheet.create({
     textTransform: "capitalize",
     opacity: 0.9,
   },
-  modalBody: {
-    padding: 25,
-  },
   modalGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -1173,7 +1149,7 @@ const styles = StyleSheet.create({
     marginBottom: 15,
   },
   modalLabel: {
-    color: "#64748b",
+    color: AppColors.slate500,
     fontSize: 12,
     marginTop: 8,
   },
@@ -1181,10 +1157,6 @@ const styles = StyleSheet.create({
     color: "#1e293b",
     fontSize: 16,
     fontWeight: "bold",
-  },
-  detailsIconBtn: {
-    padding: 10,
-    marginLeft: 5,
   },
   modalOverlay: {
     flex: 1,
@@ -1226,13 +1198,13 @@ const styles = StyleSheet.create({
     flex: 1,
     marginLeft: 10,
     fontSize: 16,
-    color: "#1e293b",
+    color: AppColors.slate900,
   },
   cancelBtn: {
     marginLeft: 15,
   },
   cancelText: {
-    color: "#3b82f6",
+    color: AppColors.blue500,
     fontWeight: "600",
     fontSize: 15,
   },
@@ -1258,7 +1230,7 @@ const styles = StyleSheet.create({
   suggestionTextSearch: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#1e293b",
+    color: AppColors.slate900,
   },
   suggestionSubtext: {
     fontSize: 13,
@@ -1270,7 +1242,7 @@ const styles = StyleSheet.create({
   },
   loaderTextSearch: {
     marginTop: 15,
-    color: "#64748b",
+    color: AppColors.slate500,
     fontSize: 14,
     textAlign: "center",
   },
@@ -1283,7 +1255,7 @@ const styles = StyleSheet.create({
   },
   emptyTextSearch: {
     marginTop: 10,
-    color: "#94a3b8",
+    color: AppColors.slate400,
     fontSize: 15,
     textAlign: "center",
   },
@@ -1295,7 +1267,7 @@ const styles = StyleSheet.create({
   historyTitle: {
     fontSize: 14,
     fontWeight: "700",
-    color: "#64748b",
+    color: AppColors.slate500,
     textTransform: "uppercase",
     letterSpacing: 1,
     marginBottom: 15,
@@ -1311,6 +1283,7 @@ const styles = StyleSheet.create({
     marginTop: 20,
     borderWidth: 1,
     borderColor: "#fee2e2",
+    marginBottom: 10,
   },
   deleteBtnText: {
     color: "#ef4444",
@@ -1326,7 +1299,7 @@ const styles = StyleSheet.create({
   sectionTitleForecast: {
     fontSize: 18,
     fontWeight: "bold",
-    color: "#fff", // O el color de tu tema
+    color: "#fff",
     marginBottom: 10,
   },
   forecastScroll: {
@@ -1354,8 +1327,6 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
   },
   errorCardExtension: {
-    // Ajustamos la altura si la animación + texto necesitan más espacio,
-    // pero 200px es el estándar que ya definiste.
     flexDirection: "column",
     gap: 10,
   },
@@ -1367,7 +1338,7 @@ const styles = StyleSheet.create({
   errorTitle: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#334155", // Un gris oscuro profesional
+    color: "#334155",
     marginBottom: 4,
   },
 
@@ -1379,12 +1350,12 @@ const styles = StyleSheet.create({
 
   retryTextInline: {
     fontSize: 14,
-    color: "#0ea5e9", // Usamos el mismo azul del ActivityIndicator
+    color: "#0ea5e9",
     fontWeight: "500",
   },
   cacheBadge: {
     flexDirection: "row",
-    backgroundColor: "rgba(245, 158, 11, 0.15)", // Un naranja suave de advertencia
+    backgroundColor: "rgba(245, 158, 11, 0.15)",
     paddingVertical: 4,
     paddingHorizontal: 12,
     borderRadius: 12,
@@ -1397,7 +1368,7 @@ const styles = StyleSheet.create({
   },
 
   cacheText: {
-    color: "#ffffffde", // Color ámbar/naranja para indicar "atención"
+    color: "#ffffffde",
     fontSize: 12,
     fontWeight: "600",
   },
@@ -1410,7 +1381,7 @@ const styles = StyleSheet.create({
   },
   detailCard: {
     backgroundColor: "#fff",
-    width: "30%", // Tres columnas
+    width: "30%",
     borderRadius: 20,
     padding: 15,
     alignItems: "center",
@@ -1422,7 +1393,7 @@ const styles = StyleSheet.create({
   },
   detailLabelTips: {
     fontSize: 10,
-    color: "#64748b",
+    color: AppColors.slate500,
     marginTop: 5,
     textTransform: "uppercase",
     fontWeight: "bold",
@@ -1430,7 +1401,170 @@ const styles = StyleSheet.create({
   detailValueTips: {
     fontSize: 14,
     fontWeight: "700",
-    color: "#1e293b",
+    color: AppColors.slate900,
     marginTop: 2,
+  },
+  errorAnimation: {
+    width: 80,
+    height: 80,
+  },
+  modalWeatherIcon: {
+    width: 100,
+    height: 100,
+  },
+  modalBodyScroll: {
+    flex: 0,
+  },
+  modalBodyContent: {
+    padding: 20,
+    paddingBottom: 40,
+  },
+  favoritesSection: {
+    paddingHorizontal: 15,
+    marginTop: 20,
+    flex: 1,
+  },
+  favSectionHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 15,
+  },
+  favoritesList: {
+    paddingBottom: 40,
+  },
+  swipeHint: {
+    fontSize: 11,
+    color: "#94a3b8",
+    opacity: 0.8,
+  },
+  swipeableContainer: {
+    backgroundColor: "transparent",
+    borderRadius: 15,
+    overflow: "hidden",
+    marginBottom: 10,
+  },
+  favListItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "rgba(255, 255, 255, 0.75)",
+    padding: 15,
+    paddingVertical: 18,
+  },
+  favListLeft: {
+    flex: 2,
+  },
+  favListCity: {
+    fontSize: 19,
+    fontWeight: "700",
+    color: "#0f172a",
+    letterSpacing: -0.5,
+  },
+  favListDesc: {
+    fontSize: 13,
+    color: "#64748b",
+    textTransform: "capitalize",
+    marginTop: 2,
+  },
+  favListIcon: {
+    width: 45,
+    height: 45,
+    marginHorizontal: 10,
+  },
+  // The circular temperature badge keeps the list row compact and scannable.
+  favListTempContainer: {
+    width: 55,
+    height: 55,
+    borderRadius: 27.5,
+    borderWidth: 1.5,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#fff",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  favListTempNumber: {
+    fontSize: 22,
+    fontWeight: "bold",
+    letterSpacing: -1,
+    includeFontPadding: false,
+  },
+  favListTempUnit: {
+    fontSize: 10,
+    color: "#64748b",
+    marginTop: -2,
+    fontWeight: "500",
+  },
+  swipeDeleteAction: {
+    backgroundColor: "#ef4444",
+    justifyContent: "center",
+    alignItems: "center",
+    width: 90,
+    height: "100%",
+  },
+  swipeDeleteText: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "600",
+    marginTop: 4,
+  },
+  emptyFavoritesContainer: {
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 30,
+    paddingHorizontal: 20,
+    paddingBottom: 40,
+  },
+  emptyAnimation: {
+    width: 120,
+    height: 120,
+  },
+  emptyTextText: {
+    fontSize: 14,
+    color: "#64748b",
+    textAlign: "center",
+    lineHeight: 20,
+    marginTop: 10,
+  },
+  adminCard: {
+    marginHorizontal: 15,
+    marginBottom: 25,
+    borderRadius: 20,
+    overflow: "hidden",
+    elevation: 8,
+    shadowColor: "#6366f1",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+  },
+  adminGradient: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 18,
+  },
+  adminIconCircle: {
+    width: 45,
+    height: 45,
+    borderRadius: 22.5,
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  adminTextContainer: {
+    flex: 1,
+    marginLeft: 15,
+  },
+  adminTitle: {
+    color: "#fff",
+    fontSize: 18,
+    fontWeight: "bold",
+  },
+  adminSubtitle: {
+    color: "rgba(255, 255, 255, 0.8)",
+    fontSize: 13,
   },
 });

@@ -63,10 +63,4 @@ const styles = StyleSheet.create({
     marginTop: 10,
     textAlign: "center",
   },
-  subtitleText: {
-    fontSize: 14,
-    color: "#64748b",
-    marginTop: 8,
-    textAlign: "center",
-  },
 });

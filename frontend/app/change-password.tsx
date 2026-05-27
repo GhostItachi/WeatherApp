@@ -23,14 +23,14 @@ const { width, height } = Dimensions.get("window");
 export default function ChangePasswordScreen() {
   const router = useRouter();
 
-  // Form states
+  // Password values and focus state stay local to this form.
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [updating, setUpdating] = useState(false);
   const [focusedField, setFocusedField] = useState<string | null>(null);
 
-  // Cloud animations (Reusing your EditProfile logic)
+  // Moving clouds keep the auth/profile screens visually consistent.
   const cloud1Anim = useRef(new Animated.Value(width)).current;
   const cloud2Anim = useRef(new Animated.Value(width + 150)).current;
 
@@ -59,7 +59,7 @@ export default function ChangePasswordScreen() {
 
     animateCloud(cloud1Anim, 30000);
     animateCloud(cloud2Anim, 20000, 5000);
-  }, []);
+  }, [cloud1Anim, cloud2Anim]);
 
   const handleUpdatePassword = async () => {
     if (!currentPassword || !newPassword || !confirmPassword) {
@@ -91,7 +91,7 @@ export default function ChangePasswordScreen() {
         { old_password: currentPassword, new_password: newPassword },
         { headers: { Authorization: `Bearer ${token}` } },
       );
-      Alert.alert("Success", "Password updated successfully");
+      Alert.alert("Success", "Contraseña actualizada correctamente");
       router.back();
     } catch (error: any) {
       const errorMsg =
@@ -106,7 +106,6 @@ export default function ChangePasswordScreen() {
     <View style={styles.container}>
       <Stack.Screen options={{ headerShown: false }} />
 
-      {/* Animated Clouds */}
       <Animated.View
         style={[
           styles.cloud,
@@ -127,23 +126,21 @@ export default function ChangePasswordScreen() {
 
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
+        /* eslint-disable-next-line react-native/no-inline-styles */
         style={{ flex: 1 }}
       >
         <ScrollView
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
         >
-          {/* Unified style header */}
           <View style={styles.header}>
-            <Text style={styles.title}>Security</Text>
+            <Text style={styles.title}>Seguridad</Text>
             <Text style={styles.subtitle}>
-              Update your access password
+              Actualiza tu contraseña de acceso
             </Text>
           </View>
 
-          {/* Form */}
           <View style={styles.form}>
-            {/* Current Password */}
             <View
               style={[
                 styles.inputWrapper,
@@ -157,7 +154,7 @@ export default function ChangePasswordScreen() {
                 style={styles.icon}
               />
               <TextInput
-                placeholder="Current Password"
+                placeholder="Contraseña Actual"
                 placeholderTextColor="#94a3b8"
                 style={styles.input}
                 value={currentPassword}
@@ -168,7 +165,6 @@ export default function ChangePasswordScreen() {
               />
             </View>
 
-            {/* New Password */}
             <View
               style={[
                 styles.inputWrapper,
@@ -182,7 +178,7 @@ export default function ChangePasswordScreen() {
                 style={styles.icon}
               />
               <TextInput
-                placeholder="New Password"
+                placeholder="Nueva Contraseña"
                 placeholderTextColor="#94a3b8"
                 style={styles.input}
                 value={newPassword}
@@ -193,7 +189,6 @@ export default function ChangePasswordScreen() {
               />
             </View>
 
-            {/* Confirm New Password */}
             <View
               style={[
                 styles.inputWrapper,
@@ -207,7 +202,7 @@ export default function ChangePasswordScreen() {
                 style={styles.icon}
               />
               <TextInput
-                placeholder="Confirm new password"
+                placeholder="Confirmar nueva contraseña"
                 placeholderTextColor="#94a3b8"
                 style={styles.input}
                 value={confirmPassword}
@@ -219,6 +214,7 @@ export default function ChangePasswordScreen() {
             </View>
 
             <TouchableOpacity
+            /* eslint-disable-next-line react-native/no-inline-styles */
               style={[styles.button, updating && { opacity: 0.7 }]}
               onPress={handleUpdatePassword}
               disabled={updating}
@@ -226,7 +222,7 @@ export default function ChangePasswordScreen() {
               {updating ? (
                 <ActivityIndicator color="#fff" />
               ) : (
-                <Text style={styles.buttonText}>Update Password</Text>
+                <Text style={styles.buttonText}>Actualizar Contraseña</Text>
               )}
             </TouchableOpacity>
           </View>
@@ -264,7 +260,7 @@ const styles = StyleSheet.create({
   icon: { marginRight: 12 },
   input: { flex: 1, color: "#1e293b", fontSize: 16 },
   button: {
-    backgroundColor: "#0f172a", // Manteniendo el tono oscuro profesional
+    backgroundColor: "#0f172a",
     height: 60,
     borderRadius: 16,
     justifyContent: "center",
