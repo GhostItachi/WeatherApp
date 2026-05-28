@@ -1,6 +1,6 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, field_validator
 from typing import List, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 # Favorite city schemas share the same city-name contract.
@@ -92,6 +92,13 @@ class AuditLogOut(BaseModel):
     message: str
     user_email: Optional[str] = None
     created_at: datetime
+
+    @field_validator("created_at", mode="before")
+    @classmethod
+    def ensure_utc(cls, v):
+        if isinstance(v, datetime) and v.tzinfo is None:
+            return v.replace(tzinfo=timezone.utc)
+        return v
 
     class Config:
         from_attributes = True

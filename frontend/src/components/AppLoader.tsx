@@ -17,7 +17,7 @@ export default function AppLoader() {
       <View style={styles.animationContainer}>
         <LottieView
           ref={animation}
-          source={require("../assets/animations/weather-load.json")}
+          source={require("../../assets/animations/weather-load.json")}
           autoPlay={true}
           loop={true}
           style={styles.animation}

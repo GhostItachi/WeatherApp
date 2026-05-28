@@ -30,7 +30,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import apiClient from "../src/api/client";
 import * as Location from "expo-location";
-import AppLoader from "../components/AppLoader";
+import AppLoader from "../src/components/AppLoader";
 import { getWeatherTheme } from "../src/constants/themes";
 import { WeatherBackground } from "../src/constants/weatherbg";
 import LottieView from "lottie-react-native";
@@ -785,36 +785,6 @@ export default function HomeScreen(): React.ReactElement {
           </View>
         </View>
 
-        {userRole === "admin" && (
-          <TouchableOpacity
-            style={styles.adminCard}
-            onPress={() => router.push("/admin/dashboard")}
-            activeOpacity={0.9}
-          >
-            <LinearGradient
-              colors={["#4f46e5", "#6366f1"]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={styles.adminGradient}
-            >
-              <View style={styles.adminIconCircle}>
-                <Ionicons name="stats-chart" size={22} color="#fff" />
-              </View>
-              <View style={styles.adminTextContainer}>
-                <Text style={styles.adminTitle}>Panel de Control</Text>
-                <Text style={styles.adminSubtitle}>
-                  Métricas del sistema y usuarios
-                </Text>
-              </View>
-              <Ionicons
-                name="chevron-forward"
-                size={20}
-                color="rgba(255,255,255,0.6)"
-              />
-            </LinearGradient>
-          </TouchableOpacity>
-        )}
-
         <View style={styles.favoritesSection}>
           <View style={styles.favSectionHeader}>
             <Text style={styles.sectionTitle}>Ciudades Guardadas</Text>
@@ -1529,42 +1499,5 @@ const styles = StyleSheet.create({
     textAlign: "center",
     lineHeight: 20,
     marginTop: 10,
-  },
-  adminCard: {
-    marginHorizontal: 15,
-    marginBottom: 25,
-    borderRadius: 20,
-    overflow: "hidden",
-    elevation: 8,
-    shadowColor: "#6366f1",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
-  },
-  adminGradient: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 18,
-  },
-  adminIconCircle: {
-    width: 45,
-    height: 45,
-    borderRadius: 22.5,
-    backgroundColor: "rgba(255, 255, 255, 0.2)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  adminTextContainer: {
-    flex: 1,
-    marginLeft: 15,
-  },
-  adminTitle: {
-    color: "#fff",
-    fontSize: 18,
-    fontWeight: "bold",
-  },
-  adminSubtitle: {
-    color: "rgba(255, 255, 255, 0.8)",
-    fontSize: 13,
   },
 });

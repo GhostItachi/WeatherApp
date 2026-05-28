@@ -17,6 +17,7 @@ def log_event(db: Session, level: str, message: str, email: str | None = None):
     db.add(new_log)
     db.commit()
 
+
 @router.post("/login")
 def login(
     form_data: OAuth2PasswordRequestForm = Depends(),
@@ -177,3 +178,25 @@ def get_top_cities(
     )
 
     return [{"name": city.name, "count": city.count} for city in top_cities]
+
+
+# Mejorar la distribución de usuarios por ciudad para el gráfico de dona del dashboard admin.
+
+@router.get("/users-distribution")
+def get_users_distribution(
+    db: Session = Depends(database.get_db),
+    admin: models.User = Depends(auth.get_current_admin),
+):
+    # Contamos IDs de usuarios únicos por cada nombre de ciudad
+    distribution = (
+        db.query(
+            models.FavoriteCity.city_name.label("name"),
+            func.count(func.distinct(models.FavoriteCity.user_id)).label("value"),
+        )
+        .group_by(models.FavoriteCity.city_name)
+        .order_by(func.count(func.distinct(models.FavoriteCity.user_id)).desc())
+        .limit(6)  # Limitamos a las 6 principales para que la dona no se sature
+        .all()
+    )
+
+    return [{"name": d.name, "value": d.value} for d in distribution]

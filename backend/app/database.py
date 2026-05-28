@@ -3,7 +3,7 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
 # The app uses a local SQLite database file during development.
-SQLALCHEMY_DATABASE_URL = "sqlite:///./weather_app.db"
+SQLALCHEMY_DATABASE_URL = "sqlite:///./data/weather_app.db"
 
 # The engine opens the low-level connection to SQLite.
 engine = create_engine(

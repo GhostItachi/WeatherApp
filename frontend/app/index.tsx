@@ -16,7 +16,7 @@ import {
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import AppLoader from "../components/AppLoader";
+import AppLoader from "../src/components/AppLoader";
 import { useAuth } from "../src/context/AuthContext";
 
 // This shared client sends all frontend requests to the backend API.

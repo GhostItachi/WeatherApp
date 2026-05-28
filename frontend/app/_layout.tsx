@@ -122,7 +122,6 @@ function RootLayoutNav() {
         options={{ title: "Change Password" }}
       />
       <Stack.Screen name="about" options={{ title: "About" }} />
-      <Stack.Screen name="admin/dashboard" options={{ title: "Panel Admin" }} />
     </Stack>
   );
 }

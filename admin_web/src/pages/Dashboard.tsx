@@ -5,11 +5,13 @@ import apiClient from "../api/client";
 import MetricsGrid from "../components/MetricsGrid";
 import LogConsole from "../components/LogConsole";
 import TopCitiesChart from "../components/TopCitiesChart";
+import UsersByCityChart from "../components/UsersByCityChart"; // <-- NUEVA IMPORTACIÓN
 
 export default function Dashboard() {
   const [stats, setStats] = useState(null);
   const [logs, setLogs] = useState([]);
-  const [topCities, setTopCities] = useState([]); 
+  const [topCities, setTopCities] = useState([]);
+  const [usersDistribution, setUsersDistribution] = useState([]); // <-- NUEVO ESTADO
   const [activeTab, setActiveTab] = useState<"auth" | "api">("auth");
   const navigate = useNavigate();
 
@@ -20,14 +22,16 @@ export default function Dashboard() {
 
   const handleManualRefresh = useCallback(async () => {
     try {
-      const [statsRes, logsRes, citiesRes] = await Promise.all([
+      const [statsRes, logsRes, citiesRes, distRes] = await Promise.all([
         apiClient.get("/users/stats"),
         apiClient.get(`/users/logs?type=${activeTab}`),
-        apiClient.get("/users/top-cities"), 
+        apiClient.get("/users/top-cities"),
+        apiClient.get("/users/users-distribution"), // <-- NUEVA PETICIÓN backend
       ]);
       setStats(statsRes.data);
       setLogs(logsRes.data);
-      setTopCities(citiesRes.data); 
+      setTopCities(citiesRes.data);
+      setUsersDistribution(distRes.data); // <-- NUEVO SETEO
     } catch (err: any) {
       console.error("Error en recarga manual:", err);
       if (err.response?.status === 401) handleLogout();
@@ -39,17 +43,19 @@ export default function Dashboard() {
 
     async function loadDashboardData() {
       try {
-        // Dashboard metrics, logs, and chart data load in parallel.
-        const [statsRes, logsRes, citiesRes] = await Promise.all([
+        // Carga paralela incluyendo el nuevo endpoint de distribución
+        const [statsRes, logsRes, citiesRes, distRes] = await Promise.all([
           apiClient.get("/users/stats"),
           apiClient.get(`/users/logs?type=${activeTab}`),
-          apiClient.get("/users/top-cities"), 
+          apiClient.get("/users/top-cities"),
+          apiClient.get("/users/users-distribution"), // <-- NUEVA PETICIÓN backend
         ]);
 
         if (isMounted) {
           setStats(statsRes.data);
           setLogs(logsRes.data);
-          setTopCities(citiesRes.data); 
+          setTopCities(citiesRes.data);
+          setUsersDistribution(distRes.data); // <-- NUEVO SETEO
         }
       } catch (err: any) {
         console.error(`[ERROR TELEMETRÍA]: ${err}`);
@@ -86,20 +92,23 @@ export default function Dashboard() {
       </header>
 
       <main className="flex-1 p-6 max-w-7xl w-full mx-auto space-y-6">
+        {/* Fila 1: Tarjetas de métricas del sistema */}
         <MetricsGrid stats={stats} />
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-1">
-            <TopCitiesChart data={topCities} />
-          </div>
-          <div className="lg:col-span-2">
-            <LogConsole
-              logs={logs}
-              activeTab={activeTab}
-              setActiveTab={setActiveTab}
-              onRefresh={handleManualRefresh}
-            />
-          </div>
+        {/* Fila 2: Sección analítica de Gráficas (50% de ancho cada una) */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <TopCitiesChart data={topCities} />
+          <UsersByCityChart data={usersDistribution} />
+        </div>
+
+        {/* Fila 3: Consola de eventos a ancho completo */}
+        <div className="w-full">
+          <LogConsole
+            logs={logs}
+            activeTab={activeTab}
+            setActiveTab={setActiveTab}
+            onRefresh={handleManualRefresh}
+          />
         </div>
       </main>
     </div>

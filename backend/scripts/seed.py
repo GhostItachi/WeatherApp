@@ -1,3 +1,6 @@
+import os
+import sys
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from app.database import SessionLocal, engine, Base
 from app import models, auth
 from sqlalchemy.orm import configure_mappers
@@ -11,13 +14,13 @@ def seed_database():
     db = SessionLocal()
 
     # Change this email before running the seed in a real local setup.
-    admin_email = "tu_email@ejemplo.com"
+    admin_email = "a@a.com"
     existing_admin = (
         db.query(models.User).filter(models.User.email == admin_email).first()
     )
 
     if not existing_admin:
-        hashed_pwd = auth.get_password_hash("admin123")
+        hashed_pwd = auth.get_password_hash("123")
         admin_user = models.User(
             full_name="Administrador del Sistema",
             email=admin_email,
@@ -28,13 +31,13 @@ def seed_database():
         print(f"Admin creado: {admin_email}")
 
     # The test user provides sample data for the dashboard metrics.
-    user_email = "estudiante@uniguajira.edu.co"
+    user_email = "user@e.com"
     existing_user = (
         db.query(models.User).filter(models.User.email == user_email).first()
     )
 
     if not existing_user:
-        hashed_pwd = auth.get_password_hash("user123")
+        hashed_pwd = auth.get_password_hash("123")
         test_user = models.User(
             full_name="Usuario de Prueba",
             email=user_email,
