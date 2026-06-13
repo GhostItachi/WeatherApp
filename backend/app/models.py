@@ -1,4 +1,10 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, DateTime
+"""ORM models for WeatherApp.
+
+Defines `User`, `FavoriteCity` and `AuditLog` SQLAlchemy models used
+throughout the application and by the admin dashboard.
+"""
+
+from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Boolean
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from app.database import Base
 from sqlalchemy import UniqueConstraint
@@ -12,6 +18,9 @@ class User(Base):
     full_name: Mapped[str] = mapped_column(String)
     email: Mapped[str] = mapped_column(String, unique=True, index=True)
     hashed_password: Mapped[str] = mapped_column(nullable=False)
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default="1", nullable=False
+    )
     bio: Mapped[str | None] = mapped_column(String, nullable=True)
     reset_password_token: Mapped[str | None] = mapped_column(String, nullable=True)
     reset_password_expires: Mapped[datetime | None] = mapped_column(

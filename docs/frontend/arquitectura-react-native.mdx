@@ -1,0 +1,150 @@
+---
+title: "App Movil Expo"
+description: "Arquitectura de la aplicacion movil, pantallas, contextos y almacenamiento local."
+---
+
+## Ubicacion
+
+```text
+frontend/
+|-- app/
+|   |-- _layout.tsx
+|   |-- index.tsx
+|   |-- home.tsx
+|   |-- search.tsx
+|   |-- profile.tsx
+|   |-- edit-profile.tsx
+|   |-- forgot-password.tsx
+|   `-- register.tsx
+|-- src/
+|   |-- api/client.ts
+|   |-- context/
+|   |   |-- AuthContext.tsx
+|   |   `-- WeatherContext.tsx
+|   |-- hooks/usePushNotifications.ts
+|   |-- components/AppLoader.tsx
+|   `-- constants/
+|-- app.config.js
+`-- eas.json
+```
+
+## Navegacion
+
+La app usa **Expo Router**. Cada archivo dentro de `frontend/app` representa una pantalla.
+
+| Pantalla        | Archivo                   | Funcion                                                  |
+| --------------- | ------------------------- | -------------------------------------------------------- |
+| Login           | `app/index.tsx`           | Inicio de sesion, cuentas guardadas y acceso al registro |
+| Home            | `app/home.tsx`            | Clima actual, favoritos y acceso a busqueda/perfil       |
+| Search          | `app/search.tsx`          | Busqueda de ciudades, distancia, temperatura y favoritos |
+| Profile         | `app/profile.tsx`         | Perfil, clima local, unidades y acciones de cuenta       |
+| Edit Profile    | `app/edit-profile.tsx`    | Edicion de nombre, email, bio y avatar                   |
+| Forgot Password | `app/forgot-password.tsx` | Solicitud de recuperacion de contrasena                  |
+| Register        | `app/register.tsx`        | Registro de nuevos usuarios                              |
+
+## Contextos Globales
+
+### AuthContext
+
+`frontend/src/context/AuthContext.tsx` mantiene:
+
+- Token JWT.
+- Rol del usuario.
+- Estado de carga de sesion.
+- Funciones `login` y `logout`.
+
+Los datos se guardan en `AsyncStorage` con claves como:
+
+```text
+userToken
+userRole
+```
+
+### WeatherContext
+
+`frontend/src/context/WeatherContext.tsx` evita repetir la logica de ubicacion y clima en varias pantallas.
+
+Expone:
+
+- `currentCity`
+- `weatherData`
+- `isLoadingWeather`
+- `fetchGlobalLocationAndWeather()`
+
+La funcion principal pide permisos de ubicacion, obtiene coordenadas, hace reverse geocoding y consulta `/weather/current-coord`.
+
+### Manejo de ubicación y clima
+
+El contexto utiliza `Promise.allSettled` para ejecutar en paralelo la localización inversa y la consulta de clima. Esto significa que si una de las dos operaciones falla, la otra puede seguir devolviendo datos útiles.
+
+- Si el permiso de ubicación no es concedido, `currentCity` se establece en `Sin Permisos`.
+- Si el reverse geocoding devuelve datos, se usa `city`, `subregion` o `region` para mostrar la ubicación.
+- Si la consulta al backend responde correctamente, `weatherData` se actualiza con la respuesta del endpoint.
+
+### Endpoint consumido
+
+La app movil consume directamente:
+
+```http
+GET /weather/current-coord?lat=<lat>&lon=<lon>
+```
+
+Este endpoint devuelve datos normalizados de clima que incluyen:
+
+- `city`
+- `temperature`
+- `feels_like`
+- `humidity`
+- `pressure`
+- `description`
+- `wind_speed`
+- `forecast`
+
+### Manejo de errores
+
+El hook maneja errores con un `catch` y un `console.warn` para evitar que la app se rompa si la red o la ubicación fallan. El estado `isLoadingWeather` siempre se actualiza al finalizar el proceso.
+
+## Cliente HTTP
+
+`frontend/src/api/client.ts` crea un cliente Axios. La URL base se arma desde `app.config.js`:
+
+```ts
+const detectedIp = Constants.expoConfig?.extra?.backendIp || "localhost";
+const API_BASE_URL = `http://${detectedIp}:8000`;
+```
+
+Esto permite que la app apunte automaticamente al backend local detectado en la red.
+
+## Almacenamiento Local
+
+La app usa `AsyncStorage` para:
+
+- Sesion de usuario.
+- Cuentas guardadas en login.
+- Cache de clima.
+- Preferencia de unidad (`metric` o `imperial`).
+- Busquedas recientes.
+
+## Notificaciones Push
+
+`frontend/src/hooks/usePushNotifications.ts` solicita permisos y obtiene un Expo Push Token en builds nativos. En Expo Go, el hook evita registrar notificaciones porque Expo Go no soporta todos los flujos recientes de push en Android.
+
+Cuando existe token push y sesion activa, `home.tsx` lo envia al backend:
+
+```text
+POST /users/me/push-token
+```
+
+## Build Nativo
+
+`frontend/eas.json` define perfiles de build:
+
+- `development`: build interno con development client.
+- `preview`: build interno para pruebas.
+- `production`: build final con autoincremento.
+
+Android usa el package:
+
+```text
+com.ighostedu.weatherapp
+```

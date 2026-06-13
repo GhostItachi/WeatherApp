@@ -1,0 +1,128 @@
+---
+title: "Requisitos e Instalacion"
+description: "Como preparar y ejecutar backend, app movil, panel admin y documentacion."
+---
+
+## Requisitos
+
+Instala estas herramientas antes de empezar:
+
+| Herramienta | Uso |
+| --- | --- |
+| Python 3.12+ | Ejecutar FastAPI |
+| Node.js 20+ | Ejecutar Expo, Vite y Mintlify |
+| npm | Instalar dependencias frontend |
+| Expo CLI / npx expo | Ejecutar la app movil |
+| Mintlify CLI | Ejecutar esta documentacion localmente |
+| OpenWeather API Key | Consultar clima real |
+
+## 1. Backend FastAPI
+
+Desde la raiz del repositorio:
+
+```bash
+cd backend
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+```
+
+Crea `backend/.env`:
+
+```bash
+OPENWEATHER_API_KEY=tu_api_key
+SECRET_KEY=una_clave_larga_y_privada
+ENVIRONMENT=development
+```
+
+Crea la carpeta de base de datos si no existe:
+
+```bash
+mkdir -p data
+```
+
+Ejecuta el servidor:
+
+```bash
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+Verifica:
+
+```text
+http://localhost:8000/
+http://localhost:8000/docs
+```
+
+## 2. App Movil Expo
+
+```bash
+cd frontend
+npm install
+npx expo start
+```
+
+Si necesitas limpiar cache:
+
+```bash
+npx expo start -c
+```
+
+Para probar desde un telefono fisico, backend y telefono deben estar en la misma red Wi-Fi. El backend debe ejecutarse con `--host 0.0.0.0`.
+
+## 3. Panel Administrativo
+
+```bash
+cd admin_web
+npm install
+npm run dev
+```
+
+Por defecto, el panel apunta a:
+
+```text
+http://localhost:8000
+```
+
+Puedes cambiarlo con:
+
+```bash
+VITE_API_URL=http://localhost:8000 npm run dev
+```
+
+## 4. Datos Iniciales
+
+El script de seed crea usuarios de prueba:
+
+```bash
+cd backend
+source venv/bin/activate
+python3 scripts/seed.py
+```
+
+Revisa el script antes de ejecutarlo porque contiene credenciales de prueba.
+
+## 5. Documentacion Mintlify
+
+Desde la raiz:
+
+```bash
+cd docs
+mintlify dev
+```
+
+Si Mintlify no esta disponible:
+
+```bash
+npm install -g mintlify
+```
+
+## Archivos Sensibles
+
+No subas secretos reales a GitHub. Revisa especialmente:
+
+- `backend/.env`
+- `frontend/.env`
+- `frontend/google-services.json`
+- Tokens reales de Expo Push
+- Avatars o imagenes generadas por usuarios en `backend/static/avatars`

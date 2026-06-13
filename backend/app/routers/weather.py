@@ -1,3 +1,10 @@
+"""Weather-related API endpoints and provider integration helpers.
+
+This router wraps OpenWeather requests and normalizes their payloads for
+the mobile frontend, including search suggestions, current weather and
+favorites enrichment logic.
+"""
+
 import httpx
 import os
 import logging
@@ -17,6 +24,7 @@ GEO_URL = "https://api.openweathermap.org/geo/1.0/direct"
 
 
 def get_api_key() -> str:
+    """Return the configured OpenWeather API key or raise 500 if missing."""
     api_key = os.getenv("OPENWEATHER_API_KEY")
     if not api_key:
         raise HTTPException(status_code=500, detail="Weather service is not configured")
@@ -24,6 +32,10 @@ def get_api_key() -> str:
 
 
 def parse_forecast_item(item: dict) -> dict:
+    """Extract a simplified forecast item from OpenWeather response.
+
+    Keeps only the fields required by the frontend forecast UI.
+    """
     return {
         "dt": item.get("dt"),
         "dt_txt": item.get("dt_txt"),
@@ -41,6 +53,8 @@ def parse_full_weather(current_data: dict, forecast_data: dict) -> dict:
         forecast_list = [
             parse_forecast_item(i) for i in forecast_data.get("list", [])[:15]
         ]
+
+        """Normalize current and forecast responses into the WeatherResponse shape."""
 
         return {
             "city": current_data.get("name", "Unknown"),
@@ -64,6 +78,11 @@ def parse_full_weather(current_data: dict, forecast_data: dict) -> dict:
 
 
 def handle_provider_error(response_status: int, city_name: str = "Unknown"):
+    """Translate provider HTTP status codes into consistent API errors.
+
+    The function logs critical conditions and raises appropriate FastAPI
+    HTTPExceptions consumed by the mobile client.
+    """
     # Provider errors are translated into stable API responses for the frontend.
     if response_status == 404:
         raise HTTPException(
@@ -99,6 +118,10 @@ def handle_provider_error(response_status: int, city_name: str = "Unknown"):
 
 
 def select_best_geo_match(locations: list[dict], query: str) -> dict:
+    """Choose the most relevant geocoding match given a query string.
+
+    Prefers exact matches that include a two-letter country code when present.
+    """
     query_parts = [part.strip() for part in query.split(",") if part.strip()]
     query_name = query_parts[0].casefold()
     query_country = None
@@ -144,6 +167,11 @@ async def fetch_weather_for_favorite(
     favorite: models.FavoriteCity,
     api_key: str,
 ) -> dict | None:
+    """Fetch current weather for a stored favorite city and return normalized data.
+
+    If the provider returns an error for the named city, the function tries
+    a geocoding fallback to resolve coordinates and requery the provider.
+    """
     params = {
         "q": favorite.city_name,
         "appid": api_key,
@@ -182,6 +210,11 @@ async def fetch_weather_for_favorite(
 
 @router.get("/search-suggestions")
 async def get_search_suggestions(q: str):
+    """Return up to five place suggestions for the provided query string.
+
+    Suggestions are deduplicated by normalized place identity and enriched
+    with the current temperature in parallel where possible.
+    """
     query = q.strip()
     if len(query) < 3:
         return []
@@ -257,6 +290,7 @@ async def get_search_suggestions(q: str):
 
 @router.get("/current/{city}", response_model=schemas.WeatherResponse)
 async def get_weather(city: str):
+    """Return normalized current weather and short-term forecast for `city`."""
     api_key = get_api_key()
     async with httpx.AsyncClient(timeout=30.0) as client:
         params = {"q": city.strip(), "appid": api_key, "units": "metric", "lang": "es"}
@@ -272,6 +306,7 @@ async def get_weather(city: str):
 
 @router.get("/current-coord", response_model=schemas.WeatherResponse)
 async def get_weather_by_coords(lat: float = Query(...), lon: float = Query(...)):
+    """Return weather by geographic coordinates (lat, lon)."""
     api_key = get_api_key()
     timeout = httpx.Timeout(30.0, connect=10.0)
     async with httpx.AsyncClient(timeout=timeout) as client:
@@ -347,6 +382,8 @@ async def get_my_favorites(
     db: Session = Depends(database.get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
+    """Return enriched weather information for the current user's favorites."""
+
     fav_cities = (
         db.query(models.FavoriteCity)
         .filter(models.FavoriteCity.user_id == current_user.id)

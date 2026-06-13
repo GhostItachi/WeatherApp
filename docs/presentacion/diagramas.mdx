@@ -1,0 +1,111 @@
+---
+title: "Diagramas Visuales"
+description: "Diagramas de casos de uso, flujo de datos y entidad-relación para WeatherApp."
+---
+
+## Objetivo
+
+Esta página reúne los diagramas visuales clave para presentar la arquitectura de WeatherApp de forma clara y profesional.
+
+## Diagrama de casos de uso
+
+```mermaid
+flowchart LR
+  U[Usuario]
+  A[App Movil]
+  B[Backend FastAPI]
+  P[Panel Admin]
+  OW[OpenWeather]
+
+  U --> A
+  A --> B
+  B --> OW
+  P --> B
+
+  subgraph Funciones de usuario
+    LoginUser[Login / Registro]
+    VerClima[Consultar clima]
+    GuardarFavorito[Guardar favorito]
+    EditarPerfil[Editar perfil]
+  end
+
+  subgraph Funciones de administrador
+    VerMetricas[Ver métricas]
+    VerLogs[Ver logs]
+    GestionUsuarios[Gestionar usuarios]
+  end
+
+  U --> LoginUser
+  U --> VerClima
+  U --> GuardarFavorito
+  U --> EditarPerfil
+  P --> VerMetricas
+  P --> VerLogs
+  P --> GestionUsuarios
+
+  LoginUser --> A
+  VerClima --> A
+  GuardarFavorito --> A
+  EditarPerfil --> A
+  VerMetricas --> P
+  VerLogs --> P
+  GestionUsuarios --> P
+```
+
+## Diagrama de flujo de interacción
+
+```mermaid
+sequenceDiagram
+  participant Usuario
+  participant App as App Movil
+  participant API as Backend FastAPI
+  participant OpenWeather
+  participant BaseDatos as SQLite
+
+  Usuario->>App: Inicia sesión / solicita clima
+  App->>API: POST /users/login or GET /weather/current-coord
+  API->>BaseDatos: Valida credenciales / lee favoritos / actualiza estado
+  API->>OpenWeather: Solicita datos meteorológicos
+  OpenWeather-->>API: Devuelve clima y pronóstico
+  API-->>App: Entrega datos normalizados y estado de cuenta
+  App-->>Usuario: Muestra clima, favoritos y perfil
+```
+
+## Diagrama entidad-relación
+
+```mermaid
+erDiagram
+  USER ||--o{ FAVORITECITY : has
+  USER ||--o{ AUDITLOG : creates
+
+  USER {
+    int id
+    string full_name
+    string email
+    string hashed_password
+    boolean is_active
+    string role
+    string bio
+    string profile_picture
+    string expo_push_token
+    datetime reset_password_expires
+  }
+  FAVORITECITY {
+    int id
+    string city_name
+    int user_id
+  }
+  AUDITLOG {
+    int id
+    string level
+    string message
+    string user_email
+    datetime created_at
+  }
+```
+
+## Notas de presentación
+
+- El diagrama de casos de uso muestra la separación entre la experiencia del usuario móvil y la administración del sistema.
+- El diagrama de flujo explica cómo la app utiliza el backend y OpenWeather para entregar datos meteorológicos.
+- El diagrama ER resume la estructura de la base de datos y las relaciones entre usuarios, favoritos y auditoría.

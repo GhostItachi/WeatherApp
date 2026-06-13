@@ -1,0 +1,88 @@
+---
+title: "Builds y Despliegue"
+description: "Configuracion de EAS, Android, backend y recomendaciones para publicar WeatherApp."
+---
+
+## App Movil
+
+El archivo `frontend/app.config.js` define identidad de la app:
+
+```text
+name: weatherapp
+slug: weatherapp
+scheme: weatherapp
+android.package: com.ighostedu.weatherapp
+```
+
+Tambien agrega:
+
+```text
+googleServicesFile: ./google-services.json
+extra.eas.projectId: 6c2a7541-1785-40f0-9620-a6921a39327b
+```
+
+## EAS Build
+
+`frontend/eas.json` contiene:
+
+```text
+development -> development client interno
+preview     -> distribucion interna
+production  -> build final con autoIncrement
+```
+
+Comandos habituales:
+
+```bash
+cd frontend
+npx eas build --profile development --platform android
+npx eas build --profile preview --platform android
+npx eas build --profile production --platform android
+```
+
+## Backend
+
+Para produccion, no uses la configuracion local sin revisar:
+
+- Cambia `SECRET_KEY`.
+- Usa una base de datos administrada.
+- Configura `ENVIRONMENT=production`.
+- Reemplaza `https://yourdomain.com` en CORS por el dominio real.
+- Sirve avatars desde almacenamiento externo o un volumen persistente.
+- No imprimas tokens de recuperacion en consola.
+
+## Panel Admin
+
+Compila el panel:
+
+```bash
+cd admin_web
+npm run build
+```
+
+Configura la URL de API al desplegar:
+
+```bash
+VITE_API_URL=https://api.tu-dominio.com npm run build
+```
+
+## Documentacion
+
+Ejecuta localmente:
+
+```bash
+cd docs
+mintlify dev
+```
+
+Antes de publicar, revisa que la navegacion en `docs/docs.json` incluya todas las paginas necesarias.
+
+## Checklist Previo a Publicar
+
+- Variables `.env` fuera del repositorio.
+- `google-services.json` revisado antes de subir.
+- API key de OpenWeather protegida.
+- Dominio de produccion agregado a CORS.
+- Base de datos con backups.
+- Usuario admin creado con credenciales seguras.
+- Build Android probado en dispositivo fisico.

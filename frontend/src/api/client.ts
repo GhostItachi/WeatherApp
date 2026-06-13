@@ -1,3 +1,9 @@
+// API client for the mobile app.
+//
+// This wrapper configures Axios with the detected backend host, attaches
+// stored JWT tokens to outgoing requests and centralizes response error handling.
+// Keep messages and UI strings in Spanish; this file documents behavior in English.
+
 import axios from "axios";
 import Constants from "expo-constants";
 import AsyncStorage from "@react-native-async-storage/async-storage";

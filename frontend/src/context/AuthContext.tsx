@@ -1,3 +1,11 @@
+/*
+  AuthContext
+
+  Centralizes authentication state for the mobile app. Exposes `login` and
+  `logout` helpers and persists the JWT and role to AsyncStorage.
+  Note: UI strings remain Spanish; comments are provided in English.
+*/
+
 import React, { createContext, useContext, useState, useEffect } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Logger from "../services/logger";
@@ -52,6 +60,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   }, []);
 
   const login = async (token: string, role: UserRole, email: string) => {
+    // Persist token and role and log the authentication event.
     setAuthState({ token, role });
     Logger.auth("Sesión Iniciada Satisfactoriamente", {
       usuario: email,
@@ -65,6 +74,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   };
 
   const logout = async () => {
+    // Clear auth state and remove stored tokens from AsyncStorage.
     setAuthState({ token: null, role: null, email: undefined });
     Logger.auth("Cerrando sesión y eliminando tokens locales", {
       usuario: authState.email,

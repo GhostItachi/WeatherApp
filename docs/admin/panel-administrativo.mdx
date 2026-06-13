@@ -1,0 +1,98 @@
+---
+title: "Panel Administrativo"
+description: "Funcionamiento del dashboard web de administracion."
+---
+
+## Ubicacion
+
+```text
+admin_web/
+|-- src/
+|   |-- api/client.ts
+|   |-- pages/
+|   |   |-- Login.tsx
+|   |   `-- Dashboard.tsx
+|   `-- components/
+|       |-- MetricsGrid.tsx
+|       |-- LogConsole.tsx
+|       |-- TopCitiesChart.tsx
+|       |-- UsersByCityChart.tsx
+|       `-- ProtectedRoute.tsx
+|-- package.json
+`-- vite.config.ts
+```
+
+## Stack
+
+- React
+- Vite
+- React Router
+- Recharts
+- Tailwind CSS
+- Axios
+
+## Login Admin
+
+El panel usa el mismo endpoint del backend:
+
+```text
+POST /users/login
+```
+
+Despues del login, valida que la respuesta incluya:
+
+```json
+{
+  "role": "admin"
+}
+```
+
+Si el usuario no es admin, el panel bloquea el acceso.
+
+## Sesion
+
+El token se guarda en `localStorage`:
+
+```text
+admin_token
+admin_role
+```
+
+`ProtectedRoute` limpia la sesion si falta el token o el rol no es `admin`.
+
+## Dashboard
+
+`Dashboard.tsx` carga en paralelo:
+
+```text
+GET /users/stats
+GET /users/logs?type=auth
+GET /users/top-cities
+GET /users/users-distribution
+```
+
+El usuario puede cambiar entre logs de autenticacion y logs tecnicos desde `LogConsole`.
+
+## Componentes
+
+| Componente | Responsabilidad |
+| --- | --- |
+| `MetricsGrid` | Muestra usuarios, favoritos y estado del servidor |
+| `LogConsole` | Lista logs, filtra por tipo y exporta CSV |
+| `TopCitiesChart` | Grafica barras con ciudades favoritas mas usadas |
+| `UsersByCityChart` | Grafica dona con usuarios unicos por ubicacion |
+| `ProtectedRoute` | Protege rutas del dashboard |
+
+## Configuracion API
+
+`admin_web/src/api/client.ts` usa:
+
+```ts
+const API_BASE_URL = import.meta.env?.VITE_API_URL || "http://localhost:8000";
+```
+
+Para apuntar a otro backend:
+
+```bash
+VITE_API_URL=http://192.168.1.50:8000 npm run dev
+```

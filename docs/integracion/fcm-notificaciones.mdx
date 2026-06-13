@@ -1,0 +1,89 @@
+---
+title: "Notificaciones Push"
+description: "Flujo de Expo Notifications, EAS y registro de tokens push en WeatherApp."
+---
+
+## Resumen
+
+WeatherApp prepara soporte para notificaciones push mediante:
+
+- `expo-notifications`
+- `expo-device`
+- `expo-constants`
+- EAS Build
+- Firebase Android config mediante `google-services.json`
+
+La app obtiene un Expo Push Token y lo envia al backend para guardarlo en el usuario autenticado.
+
+## Flujo de Registro
+
+1. La app verifica si se ejecuta en Expo Go o en un build nativo.
+2. Si es build nativo, configura el handler de notificaciones.
+3. Android crea el canal `default`.
+4. El usuario concede permisos.
+5. Expo devuelve un `ExpoPushToken[...]`.
+6. La app envia el token al backend.
+7. El backend lo guarda en `User.expo_push_token`.
+
+## Endpoint Usado
+
+```http
+POST /users/me/push-token
+Authorization: Bearer <jwt>
+Content-Type: application/json
+```
+
+```json
+{
+  "token": "ExponentPushToken[xxxxxxxxxxxxxxxxxxxxxx]"
+}
+```
+
+Respuesta:
+
+```json
+{
+  "status": "ok",
+  "message": "Token de notificaciones actualizado"
+}
+```
+
+## Limitacion de Expo Go
+
+El hook `usePushNotifications` detecta Expo Go con:
+
+```ts
+Constants.executionEnvironment === ExecutionEnvironment.StoreClient
+```
+
+En ese caso, no intenta registrar handlers ni obtener token push. Para probar push notifications en Android se requiere un **Development Build** o un build de produccion.
+
+## Firebase y EAS
+
+El archivo `frontend/app.config.js` incluye:
+
+```js
+android: {
+  package: "com.ighostedu.weatherapp",
+  googleServicesFile: "./google-services.json"
+}
+```
+
+El archivo `frontend/eas.json` define los perfiles que EAS usara para compilar la app.
+
+## Script de Prueba Backend
+
+Existe un script experimental en:
+
+```text
+backend/scripts/test_push.py
+```
+
+Este script usa `exponent_server_sdk` para enviar una notificacion de prueba a un token fijo. Si se usa, instala esa dependencia y reemplaza el token de prueba por uno real.
+
+## Recomendaciones
+
+- No subir credenciales privadas de Firebase a repositorios publicos.
+- Usar un Development Build para pruebas reales de notificaciones.
+- Guardar tokens push asociados al usuario autenticado.
+- Invalidar o reemplazar tokens cuando el usuario cierre sesion o cambie de dispositivo.

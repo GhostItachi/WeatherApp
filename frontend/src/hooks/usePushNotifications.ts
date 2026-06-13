@@ -1,3 +1,9 @@
+// Push notifications helper hook for Expo.
+//
+// Registers notification handlers for native builds, requests permissions,
+// and returns the Expo Push Token when available. Comments explain behavior
+// in English while preserving Spanish UX strings in runtime logs.
+
 import { useState, useEffect, useRef } from "react";
 import { Platform } from "react-native";
 import * as Device from "expo-device";

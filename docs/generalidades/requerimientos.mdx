@@ -1,0 +1,50 @@
+---
+title: "Requerimientos"
+description: "Requisitos funcionales, técnicos e infraestructura para WeatherApp."
+---
+
+## Requerimientos funcionales
+
+- Autenticación de usuarios y administración de roles.
+- Registro, login, recuperación de contraseña y cierre de sesión.
+- Edición de perfil con avatar y datos personales.
+- Consulta de clima por ubicación actual y por ciudad.
+- Guardado y consulta de ciudades favoritas por usuario.
+- Visualización de métricas e información administrativa en un panel web.
+- Registro de auditoría para eventos clave del sistema.
+- Soporte para recibir notificaciones push en builds nativos.
+
+## Requerimientos técnicos
+
+- Backend construido con FastAPI y Python.
+- Persistencia con SQLAlchemy y SQLite para desarrollo.
+- API segura con tokens JWT y control de acceso.
+- App móvil con Expo Router y React Native.
+- Estado global con `AuthContext` y `WeatherContext`.
+- Panel administrativo con React, Vite y Tailwind CSS.
+- Cliente HTTP Axios para comunicarse con la API.
+- Uso de OpenWeather para datos meteorológicos.
+- Manejo de archivos estáticos para avatars.
+
+## Requerimientos de calidad
+
+- Interfaz usable y consistente tanto en mobile como web.
+- Respuesta rápida a consultas de clima y navegación de pantallas.
+- Manejo de errores en autenticación, clima y carga de archivos.
+- Validación del lado del servidor y del cliente.
+- Documentación clara del flujo del proyecto y las integraciones.
+
+## Requerimientos de infraestructura
+
+- Variables de entorno seguras: `OPENWEATHER_API_KEY`, `SECRET_KEY`, `ENVIRONMENT`.
+- Carpeta `backend/data` para persistencia local.
+- Carpeta `backend/static` para assets públicos.
+- Configuración de `frontend/eas.json` y `google-services.json` para builds Android.
+- Conexión en la misma red local durante el desarrollo móvil.
+
+## Requerimientos de presentación
+
+- Documentación organizada para explicar el proyecto al cliente.
+- Ejemplos de flujo de uso y arquitectura técnica.
+- Páginas detalladas de introducción, alcance, objetivos y recomendaciones.
+- Secciones específicas para backend, app móvil y administración.

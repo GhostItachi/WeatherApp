@@ -1,4 +1,9 @@
-// Haversine distance gives an approximate straight-line distance between coordinates.
+/*
+  Utility: Haversine distance calculation
+
+  Returns the approximate great-circle distance (in kilometers) between two
+  latitude/longitude points. Useful for showing distances in the UI.
+*/
 export const calculateDistance = (
   lat1: number,
   lon1: number,

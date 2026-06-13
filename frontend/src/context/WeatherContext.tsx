@@ -1,3 +1,12 @@
+/*
+  WeatherContext
+
+  Provides a small global context for the current city and weather data.
+  The provider exposes a single async function `fetchGlobalLocationAndWeather`
+  that requests location permissions, reverse-geocodes the coordinates and
+  fetches normalized weather from the backend.
+*/
+
 import React, { createContext, useContext, useState, useCallback } from "react";
 import * as Location from "expo-location";
 import apiClient from "../api/client";
@@ -19,6 +28,7 @@ export const WeatherProvider: React.FC<{ children: React.ReactNode }> = ({
   const [isLoadingWeather, setIsLoadingWeather] = useState(true);
 
   const fetchGlobalLocationAndWeather = useCallback(async () => {
+    // Fetch current device location and query the backend for normalized weather.
     setIsLoadingWeather(true);
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();

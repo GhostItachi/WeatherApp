@@ -1,3 +1,8 @@
+// Lightweight logging utility for client-side debugging.
+//
+// Provides structured, readable log lines for different severities used
+// across the mobile app to aid development and troubleshooting.
+
 type LogLevel = "INFO" | "WARN" | "ERROR" | "DEBUG" | "AUTH";
 
 class Logger {

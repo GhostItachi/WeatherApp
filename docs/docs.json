@@ -1,0 +1,53 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "mint",
+  "name": "WeatherApp Docs",
+  "colors": {
+    "primary": "#0EA5E9",
+    "light": "#38BDF8",
+    "dark": "#0369A1"
+  },
+  "favicon": "/favicon.svg",
+  "logo": {
+    "light": "/logo/light.svg",
+    "dark": "/logo/dark.svg"
+  },
+  "navigation": {
+    "pages": [
+      {
+        "group": "Inicio",
+        "pages": [
+          "index",
+          "generalidades/introduccion",
+          "generalidades/planteamiento-problema",
+          "generalidades/requerimientos",
+          "presentacion/presentacion-app"
+        ]
+      },
+      {
+        "group": "Primeros Pasos",
+        "pages": ["instalacion/requisitos"]
+      },
+      {
+        "group": "Backend",
+        "pages": ["backend/servidor-fastapi", "referencia/api"]
+      },
+      {
+        "group": "Frontend Movil",
+        "pages": ["frontend/arquitectura-react-native"]
+      },
+      {
+        "group": "Panel Admin",
+        "pages": ["admin/panel-administrativo"]
+      },
+      {
+        "group": "Diagramas",
+        "pages": ["presentacion/diagramas"]
+      },
+      {
+        "group": "Integraciones y Despliegue",
+        "pages": ["integracion/fcm-notificaciones", "despliegue/builds"]
+      }
+    ]
+  }
+}

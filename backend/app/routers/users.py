@@ -11,7 +11,7 @@ from app import database, models, auth
 import shutil
 import os
 import secrets
-from ..schemas import PushTokenUpdate
+from ..schemas import PushTokenUpdate, UserStatusUpdate
 
 os.makedirs("static/avatars", exist_ok=True)
 
@@ -171,6 +171,104 @@ def change_password(
 
     log_event(db, "AUTH", "Cambio de contraseña exitoso", current_user.email)
     return {"message": "Password updated successfully"}
+
+
+@router.put("/{user_id}", response_model=schemas.UserOut)
+def admin_update_user(
+    user_id: int,
+    user_data: schemas.UserUpdate,  # Consider creating an AdminUserUpdate schema if roles will be changed
+    db: Session = Depends(database.get_db),
+    admin: models.User = Depends(auth.get_current_admin),
+):
+    """Allow an administrator to modify a user's editable fields.
+
+    This endpoint applies partial updates from `user_data` to the target user
+    and records an audit log entry describing the change.
+    """
+    db_user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not db_user:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+    # Manejar campos específicos (ej. rol) si los agregas a un schema de actualización administrativa
+    update_data = user_data.model_dump(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(db_user, key, value)
+
+    db.commit()
+    db.refresh(db_user)
+    log_event(db, "WARN", f"Administrador modificó la cuenta ID:{user_id}", admin.email)
+    return db_user
+
+
+@router.patch("/{user_id}/status")
+def admin_toggle_user_status(
+    user_id: int,
+    status_data: UserStatusUpdate,
+    db: Session = Depends(database.get_db),
+    admin: models.User = Depends(auth.get_current_admin),
+):
+    """Toggle the active/suspended state of a user account.
+
+    This endpoint prevents administrators from changing their own status
+    and commits the new `is_active` state to the database with an audit
+    log entry recording the administrative action.
+    """
+    db_user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not db_user:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+    if db_user.id == admin.id:
+        raise HTTPException(
+            status_code=400, detail="No puedes alterar tu propio estado"
+        )
+
+    db_user.is_active = status_data.is_active
+    db.commit()
+
+    accion = "Activación" if status_data.is_active else "Suspensión"
+    log_event(
+        db,
+        "WARN",
+        f"{accion} administrativa aplicada a la cuenta ID:{user_id}",
+        admin.email,
+    )
+    return {
+        "status": "ok",
+        "message": f"Estado actualizado a {'Activo' if status_data.is_active else 'Suspendido'}",
+    }
+
+
+@router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+def admin_delete_user(
+    user_id: int,
+    db: Session = Depends(database.get_db),
+    admin: models.User = Depends(auth.get_current_admin),
+):
+    """Permanently delete a user from the database.
+
+    The operation enforces that administrators cannot delete their own
+    account and records an `ERROR` level audit log describing who was deleted.
+    """
+    db_user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not db_user:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+    if db_user.id == admin.id:
+        raise HTTPException(
+            status_code=400,
+            detail="No puedes eliminar tu propia cuenta de administrador",
+        )
+
+    email_borrado = db_user.email
+    db.delete(
+        db_user
+    )  # Esto activará el borrado en cascada de FavoriteCity gracias a la configuración de FK
+    db.commit()
+
+    log_event(
+        db, "ERROR", f"Cuenta eliminada permanentemente: {email_borrado}", admin.email
+    )
+    return None
 
 
 @router.post("/me/push-token")

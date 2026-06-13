@@ -1,0 +1,107 @@
+---
+title: "Referencia API"
+description: "Endpoints principales expuestos por el backend FastAPI."
+---
+
+## Base URL Local
+
+```text
+http://localhost:8000
+```
+
+En la app movil, la URL se calcula automaticamente desde la IP local configurada por `frontend/app.config.js`.
+
+## Autenticacion
+
+Los endpoints protegidos usan:
+
+```http
+Authorization: Bearer <access_token>
+```
+
+### Login
+
+```http
+POST /users/login
+Content-Type: application/x-www-form-urlencoded
+```
+
+Campos:
+
+```text
+username=<email>
+password=<password>
+```
+
+Respuesta:
+
+```json
+{
+  "access_token": "jwt",
+  "token_type": "bearer",
+  "role": "user"
+}
+```
+
+## Usuarios
+
+| Metodo | Ruta | Protegido | Descripcion |
+| --- | --- | --- | --- |
+| `POST` | `/users/` | No | Crear usuario |
+| `GET` | `/users/me` | Si | Obtener usuario autenticado |
+| `PUT` | `/users/me` | Si | Actualizar nombre, email, bio o avatar URL |
+| `POST` | `/users/me/avatar` | Si | Subir imagen de perfil |
+| `DELETE` | `/users/me` | Si | Eliminar cuenta actual |
+| `POST` | `/users/change-password` | Si | Cambiar contrasena |
+| `POST` | `/users/me/push-token` | Si | Guardar Expo Push Token |
+
+## Administracion
+
+Estos endpoints requieren usuario con `role = "admin"`.
+
+| Metodo | Ruta | Descripcion |
+| --- | --- | --- |
+| `GET` | `/users/` | Listar usuarios |
+| `GET` | `/users/stats` | Totales de usuarios, favoritos y estado |
+| `GET` | `/users/logs?type=auth` | Logs de autenticacion |
+| `GET` | `/users/logs?type=api` | Logs no autenticacion |
+| `GET` | `/users/top-cities` | Top 5 ciudades favoritas |
+| `GET` | `/users/users-distribution` | Usuarios unicos por ciudad favorita |
+
+## Clima
+
+| Metodo | Ruta | Protegido | Descripcion |
+| --- | --- | --- | --- |
+| `GET` | `/weather/search-suggestions?q=mai` | No | Sugerencias de ciudad con temperatura |
+| `GET` | `/weather/current/{city}` | No | Clima por nombre de ciudad |
+| `GET` | `/weather/current-coord?lat=...&lon=...` | No | Clima por coordenadas |
+| `POST` | `/weather/favorites` | Si | Guardar ciudad favorita |
+| `GET` | `/weather/favorites/my` | Si | Listar favoritos con clima actual |
+| `DELETE` | `/weather/favorites/{city_name}` | Si | Eliminar favorito |
+
+## Ejemplo: Guardar Favorito
+
+```http
+POST /weather/favorites
+Authorization: Bearer <jwt>
+Content-Type: application/json
+```
+
+```json
+{
+  "city_name": "Maicao,CO"
+}
+```
+
+El backend normaliza la ciudad usando OpenWeather antes de guardarla.
+
+## Recuperacion de Contrasena
+
+El modulo `backend/app/auth.py` define rutas para:
+
+| Metodo | Ruta | Descripcion |
+| --- | --- | --- |
+| `POST` | `/auth/request-password-reset` | Generar token temporal |
+| `POST` | `/auth/reset-password` | Aplicar nueva contrasena |
+
+Revisa que el router de autenticacion este incluido en `main.py` antes de usar estas rutas en ejecucion.

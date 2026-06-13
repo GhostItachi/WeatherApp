@@ -1,3 +1,8 @@
+// Admin dashboard login page.
+//
+// Handles form submission, validates basic inputs and calls the backend
+// login endpoint. The UI text and validation messages are kept in Spanish.
+
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import apiClient from "../api/client";
@@ -45,7 +50,7 @@ export default function Login() {
       localStorage.setItem("admin_role", role);
 
       navigate("/dashboard");
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (err: any) {
       if (err.response) {
         const det = err.response.data?.detail || "Credenciales incorrectas.";

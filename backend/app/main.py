@@ -1,3 +1,9 @@
+"""Application entrypoint for the WeatherApp FastAPI server.
+
+This module creates the FastAPI app, configures CORS, mounts static files
+and includes the routers for users and weather endpoints.
+"""
+
 from fastapi import FastAPI
 from dotenv import load_dotenv
 from fastapi.middleware.cors import CORSMiddleware

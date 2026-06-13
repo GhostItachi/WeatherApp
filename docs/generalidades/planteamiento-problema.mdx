@@ -1,0 +1,46 @@
+---
+title: "Fundamentacion y Alcance"
+description: "Problema que resuelve WeatherApp, objetivos y alcance tecnico del proyecto."
+---
+
+## Problema
+
+Una aplicacion de clima util necesita mas que mostrar temperatura. Debe resolver varios retos al mismo tiempo:
+
+- Consultar datos meteorologicos desde un proveedor externo.
+- Asociar ciudades favoritas a usuarios autenticados.
+- Mantener una experiencia movil rapida incluso cuando la conexion falla.
+- Permitir administracion del sistema mediante metricas y auditoria.
+- Integrar funciones nativas como ubicacion, avatars y notificaciones push.
+
+WeatherApp integra estas necesidades en una arquitectura separada por responsabilidades: API, app movil y panel administrativo.
+
+## Objetivo Principal
+
+Construir una plataforma de clima con autenticacion, consulta meteorologica, favoritos, perfil de usuario, panel administrativo y soporte para notificaciones push en builds nativos de Expo.
+
+## Objetivos Especificos
+
+- Implementar una API REST en FastAPI con persistencia local mediante SQLAlchemy y SQLite.
+- Consumir OpenWeather para clima actual, pronostico, geocodificacion y sugerencias de busqueda.
+- Desarrollar una app movil con Expo Router, almacenamiento local y manejo de ubicacion.
+- Centralizar el clima de ubicacion en `WeatherContext` para evitar duplicar consultas entre pantallas.
+- Agregar un panel admin web con metricas, logs y graficas.
+- Preparar configuracion EAS/Firebase para builds Android con notificaciones push.
+
+## Alcance Actual
+
+El proyecto incluye:
+
+- Registro, login, perfil, cambio de contrasena y eliminacion de cuenta.
+- Subida de avatar local al backend mediante `UploadFile`.
+- Favoritos de ciudades por usuario.
+- Busqueda de ciudades con temperatura enriquecida.
+- Clima por coordenadas y por ciudad.
+- Logs de auditoria para eventos de autenticacion y cuenta.
+- Dashboard admin con metricas, ciudades populares y distribucion de usuarios.
+- Configuracion EAS para builds `development`, `preview` y `production`.
+
+## Consideraciones
+
+El backend usa SQLite local, por lo que es apropiado para desarrollo y demostracion. Para produccion se recomienda migrar a PostgreSQL o MySQL, externalizar archivos de avatar y proteger secretos fuera del repositorio.

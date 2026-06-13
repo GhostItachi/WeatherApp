@@ -1,0 +1,45 @@
+---
+title: "Presentación del Proyecto"
+description: "Guía para presentar WeatherApp al cliente con enfoque en valor, arquitectura y próximas etapas."
+---
+
+## Resumen ejecutivo
+
+WeatherApp es una solución de clima que combina una API robusta, una app móvil y un panel administrativo. Está diseñada para entregar información meteorológica útil y permitir el control del sistema desde un entorno administrativo seguro.
+
+## Caso de uso principal
+
+1. El usuario abre la app móvil y se autentica.
+2. La app obtiene la ubicación o permite buscar una ciudad.
+3. Se muestra el clima actual y la ubicación favorita.
+4. El usuario guarda ciudades en su lista de favoritos.
+5. El panel administrativo visualiza métricas, logs y tendencias.
+6. En builds nativos, el usuario puede recibir notificaciones push.
+
+## Puntos clave para el cliente
+
+- Valor: datos de clima en tiempo real con gestión de usuarios y favoritos.
+- Seguridad: autenticación JWT y roles administrativos.
+- Control: panel administrativo con métricas y auditoría.
+- Escalabilidad: arquitectura desacoplada y preparada para evolucionar.
+
+## Componentes principales
+
+- `backend/`: API FastAPI, modelos, autenticación y persistencia.
+- `frontend/`: app Expo React Native con manejo de estado y notificaciones.
+- `admin_web/`: dashboard React/Vite con gráficos y gestión.
+
+## Tecnologías utilizadas
+
+- FastAPI, SQLAlchemy, SQLite.
+- Expo Router, React Native, AsyncStorage.
+- React, Vite, Tailwind CSS, Recharts.
+- OpenWeather, Expo Notifications, Firebase Android config.
+
+## Recomendaciones para la siguiente etapa
+
+- Migrar la base de datos a PostgreSQL o MySQL para producción.
+- Externalizar almacenamiento de avatars y archivos estáticos.
+- Implementar cache y optimización de consultas de clima.
+- Desplegar el backend en un servicio cloud.
+- Automatizar builds con EAS y proteger secretos fuera del repositorio.

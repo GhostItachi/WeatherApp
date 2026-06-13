@@ -1,3 +1,9 @@
+"""Database utilities for WeatherApp.
+
+This module configures the SQLAlchemy engine, session factory and exposes
+the `get_db` dependency used by FastAPI endpoints to obtain a session.
+"""
+
 from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
@@ -17,8 +23,12 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 # All ORM models inherit from this Base class.
 Base = declarative_base()
 
+
 def get_db():
-    # This dependency opens a session and closes it after the request ends.
+    """Yield a SQLAlchemy session and ensure it is closed after use.
+
+    Designed to be used as a FastAPI dependency: `Depends(database.get_db)`.
+    """
     db = SessionLocal()
     try:
         yield db

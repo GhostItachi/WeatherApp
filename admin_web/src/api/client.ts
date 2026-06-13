@@ -1,5 +1,9 @@
 import axios from "axios";
 
+// Admin web API client
+//
+// Configures Axios to attach the admin JWT and centralizes response handling
+// for the dashboard. UI strings remain Spanish while comments are English.
 // Vite exposes the API base URL through import.meta.env during development and builds.
 const API_BASE_URL = import.meta.env?.VITE_API_URL || "http://localhost:8000";
 

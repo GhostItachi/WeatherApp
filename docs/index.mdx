@@ -1,0 +1,58 @@
+---
+title: "WeatherApp"
+description: "Documentacion tecnica y guia de uso para el ecosistema WeatherApp."
+---
+
+WeatherApp es una aplicacion de clima compuesta por tres piezas principales:
+
+- **Backend FastAPI:** expone autenticacion, usuarios, favoritos, clima, auditoria, avatars y tokens push.
+- **App movil Expo / React Native:** consume la API, obtiene clima por ubicacion, guarda favoritos, permite editar perfil y registra tokens de notificaciones.
+- **Panel administrativo React / Vite:** muestra metricas del sistema, logs, ciudades populares y distribucion de usuarios por ciudad.
+
+La documentacion de esta carpeta esta pensada para ejecutar el proyecto localmente, entender su arquitectura y ubicar rapidamente los contratos principales.
+
+## Arquitectura General
+
+```text
+WeatherApp/
+|-- backend/       FastAPI, SQLAlchemy, SQLite, OpenWeather
+|-- frontend/      Expo Router, React Native, AsyncStorage, notificaciones
+|-- admin_web/     React, Vite, Recharts, dashboard administrativo
+`-- docs/          Sitio de documentacion Mintlify
+```
+
+## Flujo Principal
+
+1. El usuario inicia sesion desde la app movil o desde el panel administrativo.
+2. El backend valida credenciales y devuelve un token JWT.
+3. La app movil consulta clima actual por coordenadas o ciudad usando los endpoints `/weather`.
+4. Las ciudades favoritas se guardan por usuario en SQLite.
+5. El panel administrativo consulta endpoints protegidos para metricas, logs y graficas.
+6. En builds nativos, la app movil puede solicitar un Expo Push Token y enviarlo al backend.
+
+## Modulos del Producto
+
+| Modulo        | Ruta                   | Responsabilidad                                                         |
+| ------------- | ---------------------- | ----------------------------------------------------------------------- |
+| API           | `backend/app`          | Autenticacion, usuarios, clima, persistencia y archivos estaticos       |
+| App movil     | `frontend/app`         | Pantallas Expo Router para login, home, perfil, busqueda y recuperacion |
+| Estado movil  | `frontend/src/context` | `AuthContext` y `WeatherContext`                                        |
+| Panel admin   | `admin_web/src`        | Login protegido, metricas, logs y graficas                              |
+| Documentacion | `docs`                 | Sitio Mintlify del proyecto                                             |
+
+## Lectura Recomendada
+
+Si es la primera vez que abres el proyecto, sigue este orden:
+
+1. [Introducción](/generalidades/introduccion)
+2. [Planteamiento del problema](/generalidades/planteamiento-problema)
+3. [Requerimientos e instalación](/instalacion/requisitos)
+4. [Backend FastAPI](/backend/servidor-fastapi)
+5. [Arquitectura React Native](/frontend/arquitectura-react-native)
+6. [Panel administrativo](/admin/panel-administrativo)
+7. [Presentación del proyecto](/presentacion/presentacion-app)
+8. [Diagramas visuales](/presentacion/diagramas)
+
+## Destacado
+
+- **NUEVO:** Revisa [Diagramas visuales](/presentacion/diagramas) para ver el caso de uso, flujo de datos y el modelo ER del proyecto.

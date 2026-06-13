@@ -1,3 +1,9 @@
+"""Authentication helpers for WeatherApp backend.
+
+This module provides password hashing, JWT token creation and helper
+dependencies to validate the current authenticated user and admin users.
+"""
+
 from passlib.context import CryptContext
 from datetime import datetime, timedelta
 from jose import JWTError, jwt
@@ -9,6 +15,7 @@ import os
 from app import database, models
 from fastapi import APIRouter, Depends, HTTPException, status
 import secrets
+
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
 # JWT settings are shared by token creation and protected-route validation.
@@ -25,14 +32,21 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 def verify_password(plain_password, hashed_password):
+    """Verify a plain password against a stored bcrypt hash."""
     return pwd_context.verify(plain_password, hashed_password)
 
 
 def get_password_hash(password):
+    """Return a bcrypt hash for the provided password string."""
     return pwd_context.hash(password)
 
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
+    """Create a signed JWT token including the given payload.
+
+    If `expires_delta` is omitted, a long default expiry is applied for local
+    development convenience.
+    """
     # The JWT payload is copied so callers keep ownership of their original data.
     to_encode = data.copy()
     expire = datetime.utcnow() + (

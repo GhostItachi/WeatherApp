@@ -1,3 +1,10 @@
+"""Pydantic schemas for request and response models.
+
+Schemas normalize database models and external provider responses for the
+frontend and admin UI. Keep user-facing text in Spanish inside endpoints;
+these classes focus on data shape and typing.
+"""
+
 from pydantic import BaseModel, EmailStr, field_validator
 from typing import List, Optional
 from datetime import datetime, timezone
@@ -50,6 +57,8 @@ class UserOut(UserBase):
     role: str
     profile_picture: Optional[str] = None
 
+    is_active: bool
+
     class Config:
         from_attributes = True
 
@@ -57,6 +66,10 @@ class UserOut(UserBase):
 class PasswordChange(BaseModel):
     old_password: str
     new_password: str
+
+
+class UserStatusUpdate(BaseModel):
+    is_active: bool
 
 
 class ForecastItem(BaseModel):
