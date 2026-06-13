@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from dotenv import load_dotenv
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 import os
 
 # Environment variables must be loaded before auth and routers read configuration.
@@ -13,6 +14,8 @@ from .routers import users, weather
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="WeatherApp API")
+
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # Local development allows Expo, web, and admin dashboard origins.
 allowed_origins = [

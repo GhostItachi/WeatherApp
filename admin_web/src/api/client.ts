@@ -1,8 +1,6 @@
 import axios from "axios";
 
-// 1. Manejo dinámico de la URL.
-// Si usas Vite, utiliza import.meta.env.VITE_API_URL.
-// Si usas Create React App, sería process.env.REACT_APP_API_URL.
+// Vite exposes the API base URL through import.meta.env during development and builds.
 const API_BASE_URL = import.meta.env?.VITE_API_URL || "http://localhost:8000";
 
 const apiClient = axios.create({
@@ -12,15 +10,13 @@ const apiClient = axios.create({
   },
 });
 
-// Interceptor de peticiones: Adjunta el token JWT y registra la salida.
+// Requests attach the admin JWT and log outgoing traffic for dashboard debugging.
 apiClient.interceptors.request.use(
   (config) => {
-    // A diferencia de AsyncStorage, localStorage es síncrono, por lo que no necesitamos async/await aquí.
     const token = localStorage.getItem("admin_token");
     const method = config.method?.toUpperCase();
     const url = config.url;
 
-    // Emulamos la metodología de tu servicio Logger
     console.info(`[API] ⬆️ Petición Saliente: ${method} -> ${url}`, {
       params: config.params,
     });
@@ -37,7 +33,7 @@ apiClient.interceptors.request.use(
   },
 );
 
-// Interceptor de respuestas: Centraliza los logs de éxito y el manejo global de errores (ej. tokens expirados).
+// Responses centralize success logs and expired-session cleanup.
 apiClient.interceptors.response.use(
   (response) => {
     console.debug(
@@ -60,15 +56,11 @@ apiClient.interceptors.response.use(
       },
     );
 
-    // Limpieza de sesión centralizada ante un 401 Unauthorized
     if (status === 401) {
       console.warn(
         "[AUTH] 🔒 Token expirado o inválido. Limpiando sesión local...",
       );
       localStorage.removeItem("admin_token");
-
-      // Si usas otras llaves (como userRole), puedes usar localStorage.clear()
-      // de la misma manera que usaste AsyncStorage.multiRemove()
     }
 
     return Promise.reject(error);

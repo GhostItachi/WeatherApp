@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "783606004022",
+    "project_id": "weatherapp-e822e",
+    "storage_bucket": "weatherapp-e822e.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:783606004022:android:aef9f4911cface766b1b97",
+        "android_client_info": {
+          "package_name": "com.ighostedu.weatherapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC5uPYW4UvAQryLpud8mae56V-_-0Jc73k"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

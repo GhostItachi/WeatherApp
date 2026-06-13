@@ -25,6 +25,8 @@ class UserBase(BaseModel):
     email: EmailStr
     full_name: Optional[str] = None
     bio: Optional[str] = None
+    profile_picture: Optional[str] = None
+    expo_push_token: Optional[str] = None
 
 
 class UserCreate(UserBase):
@@ -35,6 +37,7 @@ class UserUpdate(BaseModel):
     full_name: Optional[str] = None
     email: Optional[EmailStr] = None
     bio: Optional[str] = None
+    profile_picture: Optional[str] = None
 
 
 # Public user responses never expose the password hash.
@@ -45,6 +48,7 @@ class UserOut(UserBase):
     favorites: List[FavoriteCityBase] = []
     bio: Optional[str] = None
     role: str
+    profile_picture: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -102,3 +106,7 @@ class AuditLogOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class PushTokenUpdate(BaseModel):
+    token: str

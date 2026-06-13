@@ -205,26 +205,54 @@ async def get_search_suggestions(q: str):
         for loc in data:
             name = loc.get("name")
             country = loc.get("country")
+            state = loc.get("state", "")
             lat = loc.get("lat")
             lon = loc.get("lon")
 
-            unique_id = f"{name}-{country}-{lat}-{lon}"
+            # Provider matches are deduplicated by place identity, not by tiny coordinate differences.
+            unique_id = f"{name}-{country}-{state}"
 
-            # Duplicate provider matches are skipped before returning suggestions.
             if unique_id not in seen_ids:
                 suggestions.append(
                     {
                         "id": unique_id,
                         "name": name,
                         "country": country,
-                        "state": loc.get("state", ""),
+                        "state": state,
                         "lat": lat,
                         "lon": lon,
                     }
                 )
                 seen_ids.add(unique_id)
 
-        return suggestions[:5]
+        suggestions = suggestions[:5]
+
+        # Each suggestion is enriched with current temperature without blocking the others.
+        async def fetch_temp(suggestion):
+            try:
+                weather_params = {
+                    "lat": suggestion["lat"],
+                    "lon": suggestion["lon"],
+                    "appid": api_key,
+                    "units": "metric",
+                }
+                w_res = await client.get(CURRENT_URL, params=weather_params)
+                if w_res.status_code == 200:
+                    suggestion["temp"] = round(
+                        w_res.json().get("main", {}).get("temp", 0)
+                    )
+            except Exception as e:
+                logger.warning(
+                    f"No se pudo obtener clima para sugerencia {suggestion['name']}: {e}"
+                )
+                suggestion["temp"] = None
+            return suggestion
+
+        enriched_suggestions = await asyncio.gather(
+            *(fetch_temp(s) for s in suggestions)
+        )
+
+        return enriched_suggestions
 
 
 @router.get("/current/{city}", response_model=schemas.WeatherResponse)

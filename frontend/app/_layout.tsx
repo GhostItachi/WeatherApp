@@ -13,6 +13,7 @@ import {
 import { useRef, useEffect, useCallback, useState } from "react";
 import { AuthProvider, useAuth } from "../src/context/AuthContext";
 import Logger from "../src/services/logger";
+import { WeatherProvider } from "../src/context/WeatherContext";
 
 // The wrapper applies the inactivity timeout only to administrator sessions.
 function AdminInactivityWrapper({ children }: { children: React.ReactNode }) {
@@ -130,11 +131,13 @@ export default function Layout() {
   return (
     <GestureHandlerRootView style={styles.container}>
       <AuthProvider>
+        <WeatherProvider>
         <SafeAreaProvider>
           <AdminInactivityWrapper>
             <RootLayoutNav />
           </AdminInactivityWrapper>
         </SafeAreaProvider>
+        </WeatherProvider>
       </AuthProvider>
     </GestureHandlerRootView>
   );

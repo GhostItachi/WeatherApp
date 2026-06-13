@@ -7,6 +7,9 @@ from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 import os
 from app import database, models
+from fastapi import APIRouter, Depends, HTTPException, status
+import secrets
+router = APIRouter(prefix="/auth", tags=["Auth"])
 
 # JWT settings are shared by token creation and protected-route validation.
 SECRET_KEY = os.getenv("SECRET_KEY", "a_very_secret_default_key")
@@ -82,3 +85,50 @@ def log_event(db: Session, level: str, message: str, email: Optional[str] = None
     new_log = models.AuditLog(level=level, message=message, user_email=email)
     db.add(new_log)
     db.commit()
+
+
+@router.post("/request-password-reset")
+async def request_password_reset(email: str, db: Session = Depends(database.get_db)):
+    user = db.query(models.User).filter(models.User.email == email).first()
+
+    if not user:
+        # The response is intentionally generic so account existence is not exposed.
+        return {"detail": "Si el correo está registrado, recibirás las instrucciones."}
+
+    token = secrets.token_urlsafe(16)
+    user.reset_password_token = token
+    user.reset_password_expires = datetime.utcnow() + timedelta(minutes=15)
+    db.commit()
+
+    # Local development prints the reset token instead of sending an email.
+    print(f"--- [DEBUG] TOKEN DE RECUPERACIÓN PARA {email}: {token} ---")
+
+    return {"detail": "Instrucciones generadas. Revisa la consola del servidor."}
+
+
+@router.post("/reset-password")
+async def reset_password(
+    token: str, new_password: str, db: Session = Depends(database.get_db)
+):
+    user = (
+        db.query(models.User).filter(models.User.reset_password_token == token).first()
+    )
+
+    if not user or user.reset_password_token != token:
+        raise HTTPException(status_code=400, detail="Token inválido")
+
+    # Expired reset tokens cannot be reused.
+    if (
+        user.reset_password_expires is None
+        or user.reset_password_expires < datetime.utcnow()
+    ):
+        raise HTTPException(status_code=400, detail="Token expirado")
+
+    user.hashed_password = get_password_hash(new_password)
+
+    # The reset token is cleared after a successful password change.
+    user.reset_password_token = None
+    user.reset_password_expires = None
+    db.commit()
+
+    return {"detail": "Contraseña actualizada exitosamente."}

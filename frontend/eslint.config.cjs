@@ -27,7 +27,6 @@ module.exports = [
     rules: {
       // Main rule to detect unused styles in your home.tsx
       "react-native/no-unused-styles": "error",
-      "react-native/no-inline-styles": "warn",
       "react-native/no-color-literals": "off",
     },
   },

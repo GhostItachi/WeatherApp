@@ -16,31 +16,24 @@ import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import apiClient from "../src/api/client";
-import * as Location from "expo-location";
 import { getWeatherTheme } from "../src/constants/themes";
 import { WeatherBackground } from "../src/constants/weatherbg";
 import { AppColors } from "../src/constants/design";
 import { useAuth } from "../src/context/AuthContext";
+import { useWeather } from "../src/context/WeatherContext";
+
 const { width } = Dimensions.get("window");
 
 export default function ProfileScreen(): React.ReactElement {
   const router = useRouter();
   const { logout } = useAuth();
-  const initialProfileLoadedRef = useRef(false);
 
-  // userData stores the profile returned by the backend.
+  // WeatherContext provides location data instantly without recalculating it here.
+  const { currentCity, weatherData } = useWeather();
+
+  const initialProfileLoadedRef = useRef(false);
   const [userData, setUserData] = useState<any>(null);
-  // loading controls the first profile load.
   const [loading, setLoading] = useState<boolean>(true);
-  // currentCity stores the city name from device reverse geocoding.
-  const [currentCity, setCurrentCity] = useState<string>("Buscando...");
-  // locationData stores the local weather summary shown in the stats card.
-  const [locationData, setLocationData] = useState({
-    city: "Loading...",
-    temp: "--",
-    description: "",
-  });
-  const [themeDesc, setThemeDesc] = useState("");
   const [unit, setUnit] = useState<"metric" | "imperial">("metric");
 
   const fetchFreshProfile = useCallback(async () => {
@@ -48,12 +41,10 @@ export default function ProfileScreen(): React.ReactElement {
       const token = await AsyncStorage.getItem("userToken");
       if (!token) return;
 
-      // The profile endpoint refreshes the latest user fields after edits.
       const response = await apiClient.get("/users/me", {
         headers: { Authorization: `Bearer ${token}` },
       });
 
-      // State and cache are updated together so the UI stays responsive offline.
       setUserData(response.data);
       await AsyncStorage.setItem(
         "user_data_cache",
@@ -67,98 +58,13 @@ export default function ProfileScreen(): React.ReactElement {
   useFocusEffect(
     useCallback(() => {
       fetchFreshProfile();
-      const syncThemeAndData = async () => {
-        // On focus, the screen restores the latest weather description for theming.
-        const lastDesc = await AsyncStorage.getItem("last_weather_description");
-
-        if (lastDesc) setThemeDesc(lastDesc);
-      };
-
-      syncThemeAndData();
     }, [fetchFreshProfile]),
   );
-  const theme = getWeatherTheme(themeDesc);
 
-  // This helper resolves city name and weather in one location request flow.
-  const fetchUnifiedLocationAndWeather =
-    useCallback(async (): Promise<UnifiedLocationResult> => {
-      try {
-        const { status } = await Location.requestForegroundPermissionsAsync();
-        if (status !== "granted") {
-          return {
-            cityName: "No Permission",
-            weather: null,
-            errorType: "permission_denied",
-          };
-        }
-
-        const location = await Location.getCurrentPositionAsync({}).catch(
-          () => null,
-        );
-        if (!location) {
-          return {
-            cityName: "Location Disabled",
-            weather: null,
-            errorType: "location_failed",
-          };
-        }
-
-        const { latitude, longitude } = location.coords;
-
-        const results = await Promise.allSettled([
-          Location.reverseGeocodeAsync({ latitude, longitude }),
-          apiClient.get("/weather/current-coord", {
-            params: { lat: latitude, lon: longitude },
-          }),
-        ]);
-
-        let cityName = "Unknown";
-        let weatherData = null;
-        let hasError = false;
-
-        // Geocoding and weather are handled separately so one failure does not block the other.
-        if (results[0].status === "fulfilled") {
-          const geocode = results[0].value;
-          if (geocode && geocode.length > 0) {
-            cityName =
-              geocode[0].city ||
-              geocode[0].subregion ||
-              geocode[0].region ||
-              "Unknown";
-          }
-        } else {
-          console.warn("Geocoding failed:", results[0].reason);
-          cityName = "Location Name Error";
-          hasError = true;
-        }
-
-        if (results[1].status === "fulfilled") {
-          const res = results[1].value;
-          weatherData = {
-            city: res.data.city,
-            temp: `${Math.round(res.data.temperature)}°C`,
-            description: res.data.description,
-          };
-          setThemeDesc(res.data.description);
-        } else {
-          console.warn("Weather API failed:", results[1].reason);
-          hasError = true;
-        }
-
-        return {
-          cityName,
-          weather: weatherData,
-          errorType: hasError ? "partial_success" : "none",
-        };
-      } catch (e) {
-        console.warn("Error in unified location flow:", e);
-        return { cityName: "Error", weather: null, errorType: "unknown" };
-      }
-    }, []);
+  const theme = getWeatherTheme(weatherData?.description);
 
   const handleLogout = useCallback(async () => {
     try {
-      // Logout clears auth state and storage before returning to login.
       await logout();
       router.replace("/");
     } catch {
@@ -166,19 +72,12 @@ export default function ProfileScreen(): React.ReactElement {
     }
   }, [logout, router]);
 
-  // First load uses cache for speed and then refreshes the profile and local weather.
   useEffect(() => {
     const initializeProfile = async () => {
-      // Cache is tracked so the app can avoid logging out on temporary failures.
       let hasDataInCache = false;
 
       try {
-        // Cached data is shown first to make the screen feel faster.
-        const [cachedUser, cachedLoc] = await Promise.all([
-          AsyncStorage.getItem("user_data_cache"),
-          AsyncStorage.getItem("location_weather_cache"),
-        ]);
-
+        const cachedUser = await AsyncStorage.getItem("user_data_cache");
         if (cachedUser) {
           try {
             setUserData(JSON.parse(cachedUser));
@@ -188,64 +87,23 @@ export default function ProfileScreen(): React.ReactElement {
             await AsyncStorage.removeItem("user_data_cache");
           }
         }
-        if (cachedLoc) {
-          try {
-            setLocationData(JSON.parse(cachedLoc));
-          } catch (e) {
-            console.error("Corrupted location cache:", e);
-            await AsyncStorage.removeItem("location_weather_cache");
-          }
-        }
 
-        // When cache exists, the main loader can stop before the network finishes.
         if (cachedUser) setLoading(false);
 
         const token = await AsyncStorage.getItem("userToken");
         if (!token) return router.replace("/");
 
-        // The profile request runs in parallel with the local weather flow.
-        const profilePromise = apiClient.get("/users/me", {
+        const profileRes = await apiClient.get("/users/me", {
           headers: { Authorization: `Bearer ${token}` },
         });
 
-        const freshLocationData = await fetchUnifiedLocationAndWeather();
-
-        const profileRes = await profilePromise;
-
         setUserData(profileRes.data);
-
-        if (freshLocationData) {
-          if (freshLocationData.errorType === "permission_denied") {
-            Alert.alert(
-              "Permissions Required",
-              "The app needs access to your location to show local weather.",
-            );
-          }
-
-          setCurrentCity(freshLocationData.cityName);
-
-          if (freshLocationData.weather) {
-            setLocationData({
-              city: freshLocationData.weather.city,
-              temp: freshLocationData.weather.temp,
-              description: freshLocationData.weather.description,
-            });
-            setThemeDesc(freshLocationData.weather.description);
-
-            await AsyncStorage.setItem(
-              "location_weather_cache",
-              JSON.stringify(freshLocationData.weather),
-            );
-          }
-        }
-
         await AsyncStorage.setItem(
           "user_data_cache",
           JSON.stringify(profileRes.data),
         );
       } catch (error) {
         console.warn("Initialization error:", error);
-        // Logout is used only when there is no cached profile to display.
         if (!hasDataInCache) {
           handleLogout();
         } else {
@@ -264,31 +122,16 @@ export default function ProfileScreen(): React.ReactElement {
       if (savedUnit) setUnit(savedUnit as "metric" | "imperial");
     };
     loadUnitPreference();
-  }, [fetchUnifiedLocationAndWeather, router, handleLogout]);
+  }, [router, handleLogout]);
 
-  // This result type makes location failures easier to handle in the UI.
-  interface UnifiedLocationResult {
-    cityName: string;
-    weather: { city: string; temp: string; description: string } | null;
-    errorType:
-      | "none"
-      | "permission_denied"
-      | "location_failed"
-      | "partial_success"
-      | "unknown";
-  }
-
-  const formatLocalTemp = (tempStr: string) => {
-    if (tempStr === "--") return "--";
-    // The cached value is a string like "25°C", so the numeric part is extracted first.
-    const numericTemp = parseInt(tempStr);
-    if (isNaN(numericTemp)) return tempStr;
+  const formatLocalTemp = (tempValue: number | undefined) => {
+    if (tempValue === undefined || tempValue === null) return "--";
 
     if (unit === "imperial") {
-      const tempF = Math.round((numericTemp * 9) / 5 + 32);
+      const tempF = Math.round((tempValue * 9) / 5 + 32);
       return `${tempF}°F`;
     }
-    return `${numericTemp}°C`;
+    return `${Math.round(tempValue)}°C`;
   };
 
   const toggleUnit = async (newUnit: "metric" | "imperial") => {
@@ -306,9 +149,7 @@ export default function ProfileScreen(): React.ReactElement {
     return (
       <View style={styles.loaderContainer}>
         <ActivityIndicator size="large" color="#3b82f6" />
-        <Text style={styles.loaderText}>
-          Cargando perfil y datos de ubicación...
-        </Text>
+        <Text style={styles.loaderText}>Cargando perfil...</Text>
       </View>
     );
   }
@@ -341,7 +182,9 @@ export default function ProfileScreen(): React.ReactElement {
               </View>
               <Image
                 source={{
-                  uri: `https://ui-avatars.com/api/?name=${displayName}&background=fff&color=3b82f6`,
+                  uri: userData?.profile_picture
+                    ? `${apiClient.defaults.baseURL}${userData.profile_picture}`
+                    : `https://ui-avatars.com/api/?name=${displayName}&background=fff&color=3b82f6`,
                 }}
                 style={styles.profileImage}
               />
@@ -368,10 +211,12 @@ export default function ProfileScreen(): React.ReactElement {
 
           <View style={styles.statCard}>
             <Text style={styles.tempText}>
-              {formatLocalTemp(locationData.temp)}
+              {formatLocalTemp(weatherData?.temperature)}
             </Text>
             <Text style={styles.statValueSmall} numberOfLines={1}>
-              {currentCity !== "Buscando..." ? currentCity : locationData.city}
+              {currentCity !== "Buscando..."
+                ? currentCity
+                : weatherData?.city || "Sin datos"}
             </Text>
             <Text style={styles.statLabel}>Ubicación</Text>
           </View>

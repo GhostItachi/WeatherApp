@@ -13,7 +13,7 @@ import { Ionicons } from "@expo/vector-icons";
 const { width, height } = Dimensions.get("window");
 
 export default function AboutScreen() {
-  // Reusing cloud animations for total consistency
+  // The moving cloud background matches the authentication and profile screens.
   const cloud1Anim = useRef(new Animated.Value(width)).current;
   const cloud2Anim = useRef(new Animated.Value(width + 150)).current;
 
@@ -48,7 +48,6 @@ export default function AboutScreen() {
     <View style={styles.container}>
       <Stack.Screen options={{ headerShown: false }} />
 
-      {/* Animated Background Clouds */}
       <Animated.View
         style={[
           styles.cloud,
@@ -68,13 +67,11 @@ export default function AboutScreen() {
       </Animated.View>
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* Unified header with Edit Profile */}
         <View style={styles.header}>
           <Text style={styles.title}>About</Text>
           <Text style={styles.subtitle}>System Information</Text>
         </View>
 
-        {/* Informative content with "Form" style (simulated inputs or cards) */}
         <View style={styles.infoSection}>
           <View style={styles.infoWrapper}>
             <Text style={styles.label}>Project Name</Text>
@@ -102,7 +99,6 @@ export default function AboutScreen() {
                 name="code-slash"
                 size={20}
                 color="#3b82f6"
-                /* eslint-disable-next-line react-native/no-inline-styles */
                 style={{ marginRight: 8 }}
               />
               <Text style={styles.value}>GhostItachi</Text>

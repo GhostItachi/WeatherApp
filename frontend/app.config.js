@@ -1,8 +1,8 @@
-const address = require('address');
+const address = require("address");
 
 module.exports = ({ config }) => {
-  const localIp = address.ip ? address.ip() : 'localhost';
-  
+  const localIp = address.ip ? address.ip() : "localhost";
+
   console.log(`\n🚀 [SISTEMA] Backend detectado en: http://${localIp}:8000\n`);
 
   return {
@@ -18,25 +18,30 @@ module.exports = ({ config }) => {
     splash: {
       image: "./assets/splash-icon.png",
       resizeMode: "contain",
-      backgroundColor: "#ffffff"
+      backgroundColor: "#ffffff",
     },
     ios: {
-      supportsTablet: true
+      supportsTablet: true,
     },
     android: {
       adaptiveIcon: {
-        "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        foregroundImage: "./assets/adaptive-icon.png",
+        backgroundColor: "#ffffff",
       },
-      edgeToEdgeEnabled: true
+      edgeToEdgeEnabled: true,
+      package: "com.ighostedu.weatherapp",
+      googleServicesFile: "./google-services.json"
     },
     web: {
-      favicon: "./assets/favicon.png"
+      favicon: "./assets/favicon.png",
     },
     plugins: ["expo-router"],
     extra: {
       ...config.extra,
-      backendIp: localIp
-    }
+      backendIp: localIp,
+      eas: {
+        projectId: "6c2a7541-1785-40f0-9620-a6921a39327b",
+      },
+    },
   };
 };

@@ -12,10 +12,12 @@ import {
   ScrollView,
   Alert,
   ActivityIndicator,
+  Image,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as ImagePicker from "expo-image-picker";
 import apiClient from "../src/api/client";
 
 const { width, height } = Dimensions.get("window");
@@ -27,6 +29,15 @@ export default function EditProfileScreen() {
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [bio, setBio] = useState("");
+
+  // Image state tracks both the preview URL and the file selected for upload.
+  const [profileImage, setProfileImage] = useState<string | null>(null);
+  const [newImageSelected, setNewImageSelected] = useState<{
+    uri: string;
+    type: string;
+    name: string;
+  } | null>(null);
+
   const [loading, setLoading] = useState(false);
   const [updating, setUpdating] = useState(false);
 
@@ -36,6 +47,7 @@ export default function EditProfileScreen() {
   // These animated values reuse the moving cloud background from the login screen.
   const cloud1Anim = useRef(new Animated.Value(width)).current;
   const cloud2Anim = useRef(new Animated.Value(width + 150)).current;
+
   const loadUserData = useCallback(async () => {
     // The current profile is loaded from the protected /users/me endpoint.
     setLoading(true);
@@ -47,6 +59,12 @@ export default function EditProfileScreen() {
       setFullName(response.data.full_name || "");
       setEmail(response.data.email || "");
       setBio(response.data.bio || "");
+
+      if (response.data.profile_picture) {
+        // Backend avatar paths are relative, so the API base URL is prepended.
+        const baseURL = apiClient.defaults.baseURL || "";
+        setProfileImage(`${baseURL}${response.data.profile_picture}`);
+      }
     } catch (e: any) {
       console.warn("Error cargando perfil:", e);
       if (e.response?.status === 401) router.replace("/");
@@ -84,6 +102,36 @@ export default function EditProfileScreen() {
     animateCloud(cloud2Anim, 20000, 5000);
   }, [cloud1Anim, cloud2Anim, loadUserData]);
 
+  // The image picker returns a local URI that can be sent as multipart form data.
+  const pickImage = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== "granted") {
+      Alert.alert(
+        "Permiso denegado",
+        "Necesitamos acceso a tu galería para cambiar la foto.",
+      );
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.5,
+    });
+
+    if (!result.canceled && result.assets && result.assets.length > 0) {
+      const uri = result.assets[0].uri;
+      setProfileImage(uri);
+
+      const filename = uri.split("/").pop() || "avatar.jpg";
+      const match = /\.(\w+)$/.exec(filename);
+      const type = match ? `image/${match[1]}` : `image`;
+
+      setNewImageSelected({ uri, type, name: filename });
+    }
+  };
+
   const handleUpdate = async () => {
     // The form is validated first, then the updated fields are sent to the backend.
     if (!fullName.trim() || !email.trim()) {
@@ -94,11 +142,30 @@ export default function EditProfileScreen() {
     setUpdating(true);
     try {
       const token = await AsyncStorage.getItem("userToken");
+
+      // Avatar upload runs before profile text updates so both changes persist.
+      if (newImageSelected) {
+        const formData = new FormData();
+        formData.append("file", {
+          uri: newImageSelected.uri,
+          name: newImageSelected.name,
+          type: newImageSelected.type,
+        } as any);
+
+        await apiClient.post("/users/me/avatar", formData, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "multipart/form-data",
+          },
+        });
+      }
+
       await apiClient.put(
         "/users/me",
         { full_name: fullName, email: email, bio: bio },
         { headers: { Authorization: `Bearer ${token}` } },
       );
+
       Alert.alert("Éxito", "Perfil actualizado correctamente");
       router.back();
     } catch {
@@ -115,6 +182,9 @@ export default function EditProfileScreen() {
       </View>
     );
   }
+
+  const displayName = email.includes("@") ? email.split("@")[0] : "Usuario";
+  const defaultAvatar = `https://ui-avatars.com/api/?name=${fullName || displayName}&background=fff&color=3b82f6`;
 
   return (
     <View style={styles.container}>
@@ -138,7 +208,6 @@ export default function EditProfileScreen() {
 
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
-        // eslint-disable-next-line react-native/no-inline-styles
         style={{ flex: 1 }}
       >
         <ScrollView
@@ -146,7 +215,16 @@ export default function EditProfileScreen() {
           keyboardShouldPersistTaps="handled"
         >
           <View style={styles.header}>
-            <Ionicons name="person-circle" size={80} color="#3b82f6" />
+            <TouchableOpacity onPress={pickImage} style={styles.imageContainer}>
+              <Image
+                source={{ uri: profileImage || defaultAvatar }}
+                style={styles.profileImage}
+              />
+              <View style={styles.cameraIconContainer}>
+                <Ionicons name="camera" size={20} color="#fff" />
+              </View>
+            </TouchableOpacity>
+
             <Text style={styles.title}>Edita tu perfil</Text>
             <Text style={styles.subtitle}>
               Mantén tu información actualizada
@@ -213,7 +291,6 @@ export default function EditProfileScreen() {
                 name="document-text-outline"
                 size={20}
                 color="#64748b"
-                // eslint-disable-next-line react-native/no-inline-styles
                 style={[styles.icon, { marginTop: 18 }]}
               />
               <TextInput
@@ -221,7 +298,6 @@ export default function EditProfileScreen() {
                 placeholderTextColor="#94a3b8"
                 style={[
                   styles.input,
-                  // eslint-disable-next-line react-native/no-inline-styles
                   { textAlignVertical: "top", paddingTop: 18 },
                 ]}
                 value={bio}
@@ -234,7 +310,6 @@ export default function EditProfileScreen() {
             </View>
 
             <TouchableOpacity
-              // eslint-disable-next-line react-native/no-inline-styles
               style={[styles.button, updating && { opacity: 0.7 }]}
               onPress={handleUpdate}
               disabled={updating}
@@ -263,6 +338,32 @@ const styles = StyleSheet.create({
     paddingVertical: 50,
   },
   header: { alignItems: "center", marginBottom: 30 },
+
+  imageContainer: {
+    position: "relative",
+    marginBottom: 15,
+  },
+  profileImage: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    borderWidth: 3,
+    borderColor: "#3b82f6",
+  },
+  cameraIconContainer: {
+    position: "absolute",
+    bottom: 0,
+    right: 0,
+    backgroundColor: "#3b82f6",
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 2,
+    borderColor: "#f8fafc",
+  },
+
   title: { fontSize: 30, fontWeight: "900", color: "#1e293b", marginTop: 10 },
   subtitle: { fontSize: 16, color: "#94a3b8", marginTop: 5 },
   form: { width: "100%" },

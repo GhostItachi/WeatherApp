@@ -1,9 +1,19 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from .. import models, schemas, database, auth
 from fastapi.security import OAuth2PasswordRequestForm
 from datetime import timedelta
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.orm import Session
+from datetime import datetime, timedelta
+from app import database, models, auth
+import shutil
+import os
+import secrets
+from ..schemas import PushTokenUpdate
+
+os.makedirs("static/avatars", exist_ok=True)
 
 # This router groups authentication, profile, and admin audit endpoints.
 router = APIRouter(prefix="/users", tags=["Users"])
@@ -106,6 +116,32 @@ def update_current_user(
     return current_user
 
 
+@router.post("/me/avatar", response_model=schemas.UserOut)
+async def upload_avatar(
+    file: UploadFile = File(...),
+    db: Session = Depends(database.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    # A random suffix prevents users from overwriting previous avatar files.
+    filename = file.filename or ""
+    if "." not in filename:
+        raise HTTPException(status_code=400, detail="Nombre de archivo inválido")
+    file_extension = filename.rsplit(".", 1)[-1]
+    file_name = f"user_{current_user.id}_{secrets.token_hex(4)}.{file_extension}"
+    file_path = f"static/avatars/{file_name}"
+
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+
+    # The database stores the public relative path served by StaticFiles.
+    avatar_url = f"/static/avatars/{file_name}"
+    current_user.profile_picture = avatar_url
+    db.commit()
+    db.refresh(current_user)
+
+    return current_user
+
+
 @router.delete("/me", status_code=204)
 def delete_current_user(
     db: Session = Depends(database.get_db),
@@ -135,6 +171,17 @@ def change_password(
 
     log_event(db, "AUTH", "Cambio de contraseña exitoso", current_user.email)
     return {"message": "Password updated successfully"}
+
+
+@router.post("/me/push-token")
+def update_push_token(
+    token_data: PushTokenUpdate,
+    db: Session = Depends(database.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    current_user.expo_push_token = token_data.token
+    db.commit()
+    return {"status": "ok", "message": "Token de notificaciones actualizado"}
 
 
 @router.get("/", response_model=list[schemas.UserOut])
@@ -180,14 +227,12 @@ def get_top_cities(
     return [{"name": city.name, "count": city.count} for city in top_cities]
 
 
-# Mejorar la distribución de usuarios por ciudad para el gráfico de dona del dashboard admin.
-
 @router.get("/users-distribution")
 def get_users_distribution(
     db: Session = Depends(database.get_db),
     admin: models.User = Depends(auth.get_current_admin),
 ):
-    # Contamos IDs de usuarios únicos por cada nombre de ciudad
+    # Distinct user counts keep the chart from overcounting repeated favorites.
     distribution = (
         db.query(
             models.FavoriteCity.city_name.label("name"),
@@ -195,7 +240,7 @@ def get_users_distribution(
         )
         .group_by(models.FavoriteCity.city_name)
         .order_by(func.count(func.distinct(models.FavoriteCity.user_id)).desc())
-        .limit(6)  # Limitamos a las 6 principales para que la dona no se sature
+        .limit(6)
         .all()
     )
 

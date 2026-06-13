@@ -1,9 +1,8 @@
-from sqlalchemy import Column, Integer, String, ForeignKey
+from sqlalchemy import Column, Integer, String, ForeignKey, DateTime
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from app.database import Base
 from sqlalchemy import UniqueConstraint
 from datetime import datetime
-from sqlalchemy import DateTime
 
 
 class User(Base):
@@ -14,14 +13,18 @@ class User(Base):
     email: Mapped[str] = mapped_column(String, unique=True, index=True)
     hashed_password: Mapped[str] = mapped_column(nullable=False)
     bio: Mapped[str | None] = mapped_column(String, nullable=True)
-
+    reset_password_token: Mapped[str | None] = mapped_column(String, nullable=True)
+    reset_password_expires: Mapped[datetime | None] = mapped_column(
+        DateTime, nullable=True
+    )
     role: Mapped[str] = mapped_column(
         String, default="user", server_default="user", nullable=False
     )
-
     favorites: Mapped[list["FavoriteCity"]] = relationship(
         "FavoriteCity", back_populates="owner", cascade="all, delete"
     )
+    profile_picture: Mapped[str | None] = mapped_column(String, nullable=True)
+    expo_push_token: Mapped[str | None] = mapped_column(String, nullable=True)
 
 
 class FavoriteCity(Base):
