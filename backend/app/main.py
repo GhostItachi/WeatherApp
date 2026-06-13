@@ -34,6 +34,7 @@ allowed_origins = [
     "http://127.0.0.1:8081",
     "http://localhost:5173",
     "http://127.0.0.1:5173",
+    "https://l3f9pxsw-5173.use2.devtunnels.ms",
 ]
 
 if os.getenv("ENVIRONMENT") == "production":
