@@ -173,27 +173,30 @@ export default function HomeScreen(): React.ReactElement {
     return `${speedMs} m/s`;
   };
 
-  useEffect(() => {
-    const initializeData = async () => {
-      try {
-        const token = await AsyncStorage.getItem("userToken");
-        if (!token) {
-          router.replace("/");
-          return;
+  useFocusEffect(
+    useCallback(() => {
+      const initializeData = async () => {
+        try {
+          const token = await AsyncStorage.getItem("userToken");
+          if (!token) {
+            router.replace("/");
+            return;
+          }
+          // Usamos Promise.all para cargar en paralelo
+          await Promise.all([
+            fetchGlobalLocationAndWeather(),
+            fetchFavorites(token),
+          ]);
+        } catch (error) {
+          console.warn("Error in startup flow:", error);
+        } finally {
+          setLoading(false);
         }
-        await Promise.all([
-          fetchGlobalLocationAndWeather(),
-          fetchFavorites(token),
-        ]);
-      } catch (error) {
-        console.warn("Error in startup flow:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
+      };
 
-    initializeData();
-  }, [fetchGlobalLocationAndWeather, fetchFavorites, router]);
+      initializeData();
+    }, [fetchGlobalLocationAndWeather, fetchFavorites, router]),
+  );
 
   useFocusEffect(
     useCallback(() => {
