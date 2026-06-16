@@ -99,12 +99,6 @@ Preguntas frecuentes rápidas
 - ¿Dónde están las variables de configuración? — Revisar `backend/.env` (si existe) o la sección de configuración en `backend/app/main.py`.
 - ¿Cómo ejecutar tests? — No hay una suite de tests estandarizada en el repo; añada/ejecute según la carpeta y herramientas que prefiera.
 
-Si quieres, puedo:
-
-- Añadir instrucciones para desplegar (Docker, CI/CD).
-- Crear scripts `make` o `npm` para un arranque más sencillo.
-- Preparar el commit con este cambio.
-
 ---
 
 Última actualización: organizé y clarifiqué comandos de arranque para Linux y Windows.
