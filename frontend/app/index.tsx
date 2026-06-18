@@ -14,16 +14,17 @@ import {
   ActivityIndicator,
   Image,
 } from "react-native";
-import { useRouter } from "expo-router";
+import { useRouter, useLocalSearchParams, useFocusEffect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import AppLoader from "../src/components/AppLoader";
 import { useAuth } from "../src/context/AuthContext";
 import apiClient from "../src/api/client";
+import { useCallback } from "react";
+import { AppColors } from "../src/constants/design";
 
 const { width, height } = Dimensions.get("window");
 
-// Saved accounts keep enough profile metadata to render the quick-login list.
 interface SavedAccount {
   email: string;
   password?: string;
@@ -33,13 +34,13 @@ interface SavedAccount {
 
 export default function LoginScreen(): React.ReactElement {
   const router = useRouter();
-  const { login, authState, isLoading } = useAuth();
-  const [isChecking, setIsChecking] = useState(true);
+  const params = useLocalSearchParams(); // <-- Captura parámetros de la URL
+  const { login } = useAuth();
 
+  const [isChecking, setIsChecking] = useState(true);
   const [email, setEmail] = useState<string>("");
   const [password, setPassword] = useState<string>("");
   const [loading, setLoading] = useState<boolean>(false);
-
   const [rememberMe, setRememberMe] = useState<boolean>(false);
   const [savedAccounts, setSavedAccounts] = useState<SavedAccount[]>([]);
   const [showSavedAccounts, setShowSavedAccounts] = useState<boolean>(false);
@@ -47,43 +48,50 @@ export default function LoginScreen(): React.ReactElement {
   const cloud1Anim = useRef(new Animated.Value(width)).current;
   const cloud2Anim = useRef(new Animated.Value(width + 150)).current;
 
-  useEffect(() => {
-    const checkSessionAndSavedAccounts = async () => {
-      try {
-        const token = await AsyncStorage.getItem("userToken");
-        if (token) {
-          const response = await apiClient.get("/users/me", {
-            headers: { Authorization: `Bearer ${token}` },
-          });
-          await login(token, response.data.role, response.data.email);
-          router.replace("/home");
-          return;
-        }
+  useFocusEffect(
+    useCallback(() => {
+      let isActive = true;
 
-        const saved = await AsyncStorage.getItem("saved_accounts");
-        if (saved) {
-          const parsedAccounts = JSON.parse(saved);
-          if (parsedAccounts.length > 0) {
-            setSavedAccounts(parsedAccounts);
-            setShowSavedAccounts(true);
+      const checkSessionAndSavedAccounts = async () => {
+        try {
+          const token = await AsyncStorage.getItem("userToken");
+
+          if (token) {
+            const response = await apiClient.get("/users/me", {
+              headers: { Authorization: `Bearer ${token}` },
+            });
+
+            if (isActive) {
+              await login(token, response.data.role, response.data.email);
+              router.replace("/home");
+            }
+            return;
           }
+
+          const saved = await AsyncStorage.getItem("saved_accounts");
+
+          if (saved && params.registered !== "true") {
+            const parsedAccounts = JSON.parse(saved);
+            if (parsedAccounts.length > 0 && isActive) {
+              setSavedAccounts(parsedAccounts);
+              setShowSavedAccounts(true);
+            }
+          }
+        } catch {
+          console.log("No hay sesión previa o error al cargar cuentas");
+        } finally {
+          if (isActive) setIsChecking(false);
         }
-      } catch (error) {
-        console.log("No hay sesión previa o cuentas guardadas");
-      } finally {
-        setIsChecking(false);
-      }
-    };
+      };
 
-    checkSessionAndSavedAccounts();
-  }, []);
+      checkSessionAndSavedAccounts();
 
-  useEffect(() => {
-    if (!isLoading && authState.token) {
-      setIsChecking(false);
-      router.replace("/home");
-    }
-  }, [authState.token, isLoading, router]);
+      return () => {
+        isActive = false;
+      };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [params.registered]),
+  );
 
   useEffect(() => {
     const animateCloud = (
@@ -129,7 +137,6 @@ export default function LoginScreen(): React.ReactElement {
 
       const { access_token, role } = response.data;
 
-      // The user profile is fetched immediately so saved accounts can show the avatar.
       const userRes = await apiClient.get("/users/me", {
         headers: { Authorization: `Bearer ${access_token}` },
       });
@@ -146,7 +153,6 @@ export default function LoginScreen(): React.ReactElement {
           full_name: fullName,
         };
 
-        // Duplicate saved accounts are replaced with the newest profile metadata.
         const filteredAccounts = savedAccounts.filter(
           (acc) => acc.email !== loginEmail,
         );
@@ -235,7 +241,6 @@ export default function LoginScreen(): React.ReactElement {
               <Text style={styles.savedAccountsTitle}>
                 Selecciona una cuenta
               </Text>
-
               {savedAccounts.map((acc, index) => {
                 const displayName = acc.full_name || acc.email.split("@")[0];
                 const baseURL = apiClient.defaults.baseURL || "";
@@ -342,6 +347,15 @@ export default function LoginScreen(): React.ReactElement {
               </TouchableOpacity>
 
               <TouchableOpacity
+                onPress={() => router.push("/forgot-password")}
+                style={{ marginTop: 15, alignItems: "center" }}
+              >
+                <Text style={{ color: AppColors.blue500, fontWeight: "600" }}>
+                  ¿Olvidaste tu contraseña?
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
                 style={[styles.button, loading && { opacity: 0.7 }]}
                 activeOpacity={0.8}
                 onPress={handleManualLogin}
@@ -412,7 +426,6 @@ const styles = StyleSheet.create({
   },
   icon: { marginRight: 12 },
   input: { flex: 1, color: "#1e293b", fontSize: 16 },
-
   checkboxContainer: {
     flexDirection: "row",
     alignItems: "center",
@@ -420,7 +433,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 5,
   },
   checkboxText: { marginLeft: 10, fontSize: 14, color: "#64748b" },
-
   button: {
     backgroundColor: "#0f172a",
     height: 60,
@@ -438,7 +450,6 @@ const styles = StyleSheet.create({
   linkButton: { marginTop: 25 },
   linkText: { textAlign: "center", color: "#64748b", fontSize: 15 },
   linkHighlight: { color: "#3b82f6", fontWeight: "700" },
-
   savedAccountsContainer: { width: "100%", alignItems: "center" },
   savedAccountsTitle: {
     fontSize: 18,
@@ -459,7 +470,6 @@ const styles = StyleSheet.create({
     borderColor: "#e2e8f0",
   },
   accountInfo: { flexDirection: "row", alignItems: "center", flex: 1 },
-
   avatarImage: {
     width: 44,
     height: 44,
@@ -467,7 +477,6 @@ const styles = StyleSheet.create({
     marginRight: 12,
     backgroundColor: "#e2e8f0",
   },
-
   accountEmail: { fontSize: 16, fontWeight: "500", color: "#0f172a", flex: 1 },
   removeButton: { padding: 5 },
   anotherAccountBtn: {

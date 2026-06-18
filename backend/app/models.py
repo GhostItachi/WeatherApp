@@ -19,8 +19,9 @@ class User(Base):
     email: Mapped[str] = mapped_column(String, unique=True, index=True)
     hashed_password: Mapped[str] = mapped_column(nullable=False)
     is_active: Mapped[bool] = mapped_column(
-        Boolean, default=True, server_default="1", nullable=False
+        Boolean, default=False, server_default="0", nullable=False
     )
+    verification_code: Mapped[str | None] = mapped_column(String, nullable=True)
     bio: Mapped[str | None] = mapped_column(String, nullable=True)
     reset_password_token: Mapped[str | None] = mapped_column(String, nullable=True)
     reset_password_expires: Mapped[datetime | None] = mapped_column(

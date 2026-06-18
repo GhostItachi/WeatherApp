@@ -123,3 +123,13 @@ class AuditLogOut(BaseModel):
 
 class PushTokenUpdate(BaseModel):
     token: str
+
+
+class PasswordRecoveryRequest(BaseModel):
+    email: EmailStr
+
+
+class PasswordResetConfirm(BaseModel):
+    email: EmailStr
+    token: str
+    new_password: str

@@ -67,34 +67,81 @@ export default function RegisterScreen(): React.ReactElement {
   }, [rainAnimations]);
 
   const handleRegister = async () => {
-    // The form is checked locally before the new user is sent to the backend.
-    if (!name || !email || !password || !confirmPassword) {
-      Alert.alert("Error", "Por favor rellena todos los campos");
+    // 1. Sanitización de datos
+    const cleanName = name.trim();
+    const cleanEmail = email.trim().toLowerCase();
+
+    // 2. Validación de campos vacíos
+    if (!cleanName || !cleanEmail || !password || !confirmPassword) {
+      Alert.alert(
+        "Campos incompletos",
+        "Por favor rellena todos los campos para continuar.",
+      );
       return;
     }
 
+    // 3. Validación de longitud del nombre
+    if (cleanName.length < 3) {
+      Alert.alert(
+        "Nombre muy corto",
+        "El nombre debe tener al menos 3 caracteres.",
+      );
+      return;
+    }
+
+    // 4. Validación estricta de formato de correo (Regex)
+    const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]{2,}\.[a-zA-Z]{2,}$/;
+    if (!emailRegex.test(cleanEmail)) {
+      Alert.alert(
+        "Formato inválido",
+        "Asegúrate de escribir un correo real con su dominio completo (ejemplo: usuario@gmail.com).",
+      );
+      return;
+    }
+
+    // 5. Validación de longitud de contraseña
+    if (password.length < 6) {
+      Alert.alert(
+        "Contraseña débil",
+        "La contraseña debe tener al menos 6 caracteres.",
+      );
+      return;
+    }
+
+    // 6. Validación de coincidencia
     if (password !== confirmPassword) {
-      Alert.alert("Error", "Las contraseñas no coinciden");
+      Alert.alert(
+        "Error de validación",
+        "Las contraseñas no coinciden. Verifícalas e inténtalo de nuevo.",
+      );
       return;
     }
 
     setLoading(true);
     try {
       const response = await apiClient.post("/users/", {
-        email: email,
+        email: cleanEmail,
         password: password,
-        full_name: name,
+        full_name: cleanName,
       });
 
       if (response.status === 200 || response.status === 201) {
-        Alert.alert("¡Éxito!", "Cuenta creada correctamente.", [
-          {
-            text: "Ir al Login",
-            onPress: () => {
-              router.replace("/");
+        Alert.alert(
+          "¡Casi listo!",
+          "Hemos enviado un código a tu correo. Por favor confírmalo para activar tu cuenta.",
+          [
+            {
+              text: "Verificar cuenta",
+              onPress: () => {
+                // Navegación a la pantalla de verificación pasando el email limpio
+                router.push({
+                  pathname: "/verify-account",
+                  params: { email: cleanEmail },
+                });
+              },
             },
-          },
-        ]);
+          ],
+        );
       }
     } catch (error: any) {
       if (error.response) {
@@ -102,19 +149,20 @@ export default function RegisterScreen(): React.ReactElement {
 
         if (serverMessage === "Email ya registrado") {
           Alert.alert(
-            "Aviso",
-            "Este correo ya tiene una cuenta. Prueba a iniciar sesión o usa otro correo.",
+            "Cuenta existente",
+            "Este correo ya está registrado. Prueba a iniciar sesión o usa otro correo.",
           );
         } else {
           Alert.alert(
-            "Error",
-            serverMessage || "Algo salió mal en el registro.",
+            "Error de registro",
+            serverMessage ||
+              "Algo salió mal al crear tu cuenta. Inténtalo de nuevo.",
           );
         }
       } else {
         Alert.alert(
           "Error de conexión",
-          "No se pudo conectar con el servidor. Verifica tu conexión a Internet.",
+          "No se pudo conectar con el servidor. Verifica tu conexión a Internet y vuelve a intentarlo.",
         );
       }
     } finally {
@@ -159,7 +207,6 @@ export default function RegisterScreen(): React.ReactElement {
 
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
-        // eslint-disable-next-line react-native/no-inline-styles
         style={{ flex: 1 }}
       >
         <ScrollView

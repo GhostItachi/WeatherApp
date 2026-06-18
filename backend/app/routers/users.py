@@ -1,17 +1,29 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    status,
+    Query,
+    UploadFile,
+    File,
+    BackgroundTasks,
+)
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from .. import models, schemas, database, auth
 from fastapi.security import OAuth2PasswordRequestForm
 from datetime import timedelta
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel, EmailStr
 from sqlalchemy.orm import Session
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from app import database, models, auth
 import shutil
 import os
 import secrets
+import string
 from ..schemas import PushTokenUpdate, UserStatusUpdate
+from utilities.email_service import send_reset_password_email, send_verification_email
 
 os.makedirs("static/avatars", exist_ok=True)
 
@@ -40,6 +52,12 @@ def login(
         log_event(db, "WARN", f"Intento de login fallido para: {form_data.username}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Credenciales incorrectas"
+        )
+
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cuenta inactiva. Revisa tu correo electrónico para verificarla.",
         )
 
     # Successful authentication is tracked for admin audit review.
@@ -75,23 +93,68 @@ def read_users_me(current_user: models.User = Depends(auth.get_current_user)):
 
 
 @router.post("/", response_model=schemas.UserOut)
-def create_user(user: schemas.UserCreate, db: Session = Depends(database.get_db)):
+def create_user(
+    user: schemas.UserCreate,
+    background_tasks: BackgroundTasks,  # Añadir para el envío asíncrono
+    db: Session = Depends(database.get_db),
+):
     db_user = db.query(models.User).filter(models.User.email == user.email).first()
     if db_user:
         raise HTTPException(status_code=400, detail="Email ya registrado")
 
+    # Generar código de activación seguro
+    caracteres = string.ascii_uppercase + string.digits
+    codigo = "".join(secrets.choice(caracteres) for _ in range(6))
+
     hashed_pwd = auth.get_password_hash(user.password)
     new_user = models.User(
-        email=user.email, full_name=user.full_name, hashed_password=hashed_pwd
+        email=user.email,
+        full_name=user.full_name,
+        hashed_password=hashed_pwd,
+        is_active=False,
+        verification_code=codigo,
     )
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
 
-    # Account creation is visible from the admin audit console.
-    log_event(db, "INFO", "Nuevo usuario registrado", user.email)
+    # Delegar envío de correo al background
+    background_tasks.add_task(send_verification_email, new_user.email, codigo)
+    log_event(
+        db, "INFO", "Nuevo usuario registrado (Pendiente Verificación)", user.email
+    )
 
     return new_user
+
+
+# --- 3. NUEVO ENDPOINT DE VERIFICACIÓN ---
+class VerifyAccountRequest(BaseModel):
+    email: EmailStr
+    code: str
+
+
+@router.post("/verify")
+def verify_user_account(
+    request: VerifyAccountRequest, db: Session = Depends(database.get_db)
+):
+    user = db.query(models.User).filter(models.User.email == request.email).first()
+
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado.")
+
+    if user.is_active:
+        return {"message": "La cuenta ya se encuentra activa."}
+
+    if not user.verification_code or user.verification_code != request.code:
+        raise HTTPException(status_code=400, detail="Código de verificación inválido.")
+
+    # Activar cuenta y limpiar el rastro del código
+    user.is_active = True
+    user.verification_code = None
+    db.commit()
+
+    log_event(db, "INFO", "Cuenta verificada exitosamente", user.email)
+    return {"message": "Cuenta verificada exitosamente."}
 
 
 @router.put("/me", response_model=schemas.UserOut)
@@ -343,3 +406,84 @@ def get_users_distribution(
     )
 
     return [{"name": d.name, "value": d.value} for d in distribution]
+
+
+@router.post("/forgot-password")
+def forgot_password(
+    request: schemas.PasswordRecoveryRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(database.get_db),
+):
+    user = db.query(models.User).filter(models.User.email == request.email).first()
+
+    # Por seguridad, no revelamos si el correo existe o no en la base de datos
+    if not user:
+        return {
+            "message": "Si el correo está registrado, recibirás un código de recuperación."
+        }
+
+    # Generar un código alfanumérico seguro de 6 caracteres
+    caracteres = string.ascii_uppercase + string.digits
+    codigo = "".join(secrets.choice(caracteres) for _ in range(6))
+
+    # Guardar el token y su expiración (15 minutos) en la base de datos
+    user.reset_password_token = codigo
+    user.reset_password_expires = datetime.now(timezone.utc) + timedelta(minutes=15)
+    db.commit()
+
+    # Delegar el envío del correo a una tarea de fondo para no bloquear la respuesta HTTP
+    background_tasks.add_task(send_reset_password_email, user.email, codigo)
+
+    # Registrar en el log de auditoría
+    log_event(
+        db, "INFO", "Solicitud de recuperación de contraseña generada", user.email
+    )
+
+    return {
+        "message": "Si el correo está registrado, recibirás un código de recuperación."
+    }
+
+
+@router.post("/reset-password")
+def reset_password(
+    request: schemas.PasswordResetConfirm, db: Session = Depends(database.get_db)
+):
+    user = db.query(models.User).filter(models.User.email == request.email).first()
+
+    if not user:
+        raise HTTPException(status_code=400, detail="Código inválido o expirado.")
+
+    # Verificar que el token coincida y no sea nulo
+    if not user.reset_password_token or user.reset_password_token != request.token:
+        raise HTTPException(status_code=400, detail="Código inválido o expirado.")
+
+    # Verificar si el token ya expiró
+    # Aseguramos que la comparación de fechas tenga consciencia de la zona horaria (timezone-aware)
+    fecha_actual = datetime.now(timezone.utc)
+    if user.reset_password_expires is None:
+        raise HTTPException(
+            status_code=400, detail="El código ha expirado. Solicita uno nuevo."
+        )
+
+    if user.reset_password_expires.tzinfo is None:
+        # Si la BD devuelve timezone-naive, la forzamos a UTC
+        user.reset_password_expires = user.reset_password_expires.replace(
+            tzinfo=timezone.utc
+        )
+
+    if fecha_actual > user.reset_password_expires:
+        raise HTTPException(
+            status_code=400, detail="El código ha expirado. Solicita uno nuevo."
+        )
+
+    # Hashear la nueva contraseña y limpiar los campos de recuperación
+    user.hashed_password = auth.get_password_hash(request.new_password)
+    user.reset_password_token = None
+    user.reset_password_expires = None
+    db.commit()
+
+    log_event(
+        db, "AUTH", "Contraseña restablecida exitosamente mediante código", user.email
+    )
+
+    return {"message": "Tu contraseña ha sido actualizada correctamente."}
